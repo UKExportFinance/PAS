@@ -1,0 +1,71 @@
+<?php
+
+/**
+ * @file
+ * The Everyday Tools module was created to house functions that are useful 
+ * in every Drupal build that requires some degree of development. 
+ * The functions in this module are for Node Actions
+ */
+
+/**
+ * Helper function to easily create a node.
+ *
+ * @param string $title
+ *   The title of the node
+ * @param string $type
+ *   The type of node to create
+ * @param string $language
+ *   The language of the node
+ * @param int $published
+ *   If the node is published or not
+ * @param int $comments
+ *   If comments are enabled
+ * @param int $promoted
+ *   If the node is promoted or not.
+ * @param int $user_id
+ *   If the ID of the user who created the node.
+ *
+ * @return object
+ *   Returns a node object
+ */
+function everyday_tools_node_create_node($title, $type, $language, $published, $comments, $promoted, $user_id = 1) {
+  $node = new stdClass();
+  $node->title = $title;
+  $node->type = $type;
+  // Sets some defaults. Invokes hook_prepare() and hook_node_prepare().
+  node_object_prepare($node);
+  // Or e.g. 'en' if locale is enabled.
+  $node->language = $language;
+  $node->uid = $user_id;
+  // (1 or 0): published or not.
+  $node->status = $published;
+  // (1 or 0): promoted to front page.
+  $node->promote = $promoted;
+  // 0 = comments disabled, 1 = read only, 2 = read/write.
+  $node->comment = $comments;
+
+  return $node;
+}
+
+/**
+ * Find a node and return it.
+ *
+ * @param string $type
+ *   The node type
+ * @param string $title
+ *   The title of the node
+ *
+ * @return array
+ *   The an array of node entities
+ */
+function everyday_tools_node_find_node($type, $title) {
+  // Check to see if the node exists.
+  $query = new EntityFieldQuery();
+  $entities = $query->entityCondition('entity_type', 'node')
+   ->propertyCondition('type', $type)
+   ->propertyCondition('title', $title)
+   ->range(0, 1)
+   ->execute();
+
+  return $entities;
+}

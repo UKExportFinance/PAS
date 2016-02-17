@@ -1,0 +1,7 @@
+name = Everyday tools
+description = A lightweight module containing helper functions primarily for use in themes.
+package = "Everyday Tools"
+core = 7.x
+version = VERSION
+dependencies[] = field
+configure = admin/config/everyday-tools

@@ -1,0 +1,32 @@
+<?php
+
+/**
+ * @file
+ * Install file for Everyday Tools Menu module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function everyday_tools_memcache_install() {
+  // Create tables.
+  variable_set('everyday_tools_memcache_server', 'localhost');
+  variable_set('everyday_tools_memcache_server_port', '11211');
+  variable_set('everyday_tools_memcache_prefix', '');
+  variable_set('everyday_tools_memcache_compressed', 0);
+  variable_set('everyday_tools_memcache_enabled', 1);
+  variable_set('everyday_tools_memcache_https_enabled', 0);
+}
+
+/**
+ * Implements hook_install().
+ */
+function everyday_tools_memcache_uninstall() {
+  // Create tables.
+  variable_del('everyday_tools_memcache_server');
+  variable_del('everyday_tools_memcache_server_port');
+  variable_del('everyday_tools_memcache_prefix');
+  variable_del('everyday_tools_memcache_compressed');
+  variable_del('everyday_tools_memcache_enabled');
+  variable_del('everyday_tools_memcache_https_enabled');
+}

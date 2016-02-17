@@ -1,0 +1,6 @@
+name = Webform Extras
+description = A module adding extra functionality to webforms.
+package = Webform
+core = 7.x
+
+dependencies[] = webform

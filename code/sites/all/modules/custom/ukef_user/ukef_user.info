@@ -1,0 +1,6 @@
+name = UKEF User
+description = A module for customising user functionality.
+package = UKEF
+core = 7.x
+
+dependencies[] = everyday_tools

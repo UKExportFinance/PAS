@@ -1,0 +1,100 @@
+<?php
+
+/**
+ * @file
+ * The Everyday Tools module was created to house functions that are useful 
+ * in every Drupal build that requires some degree of development. 
+ * The functions in this module are for User Actions
+ */
+
+/**
+ * Get's an image from a field collection.
+ *
+ * @param string $entity
+ *   Entity item
+ * @param string $field_name
+ *   Name of the field required
+ * @param int $delta
+ *   Position of the item
+ * @param string $entity_type
+ *   Entity type, often node
+ *
+ * @return string
+ *   Markup of items value
+ */
+function everyday_tools_field_collection_get_image($entity, $field_name, $delta = 0, $entity_type = 'field_collection_item') {
+
+  $field = field_get_items($entity_type, $entity, $field_name);
+  if ($field) {
+    $output = field_view_value($entity_type, $entity, $field_name, $field[$delta]);
+    return $output['#item'];
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ * Get's a link from a field collection.
+ *
+ * @param string $entity
+ *   Entity item
+ * @param string $field_name
+ *   Name of the field required
+ * @param int $delta
+ *   Position of the item
+ * @param string $entity_type
+ *   Entity type, often node
+ *
+ * @return string
+ *   Markup of items value
+ */
+function everyday_tools_field_collection_get_link($entity, $field_name, $delta = 0, $entity_type = 'field_collection_item') {
+
+  $field = field_get_items($entity_type, $entity, $field_name);
+  if ($field) {
+    $output = field_view_value($entity_type, $entity, $field_name, $field[$delta]);
+    return $output['#element'];
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ * Function to load a field collection with revision id's.
+ *
+ * @param string $collection_id
+ *   The ID of the FC
+ * @param string $collection_revision
+ *   The revision of the FC
+ *
+ * @return object
+ *   $this_field_collection
+ */
+function everyday_tools_field_collection_load($collection_id, $collection_revision) {
+
+  $this_field_collection = current(entity_load('field_collection_item', array("value" => $collection_id), array('revision_id' => array($collection_revision))));
+
+  return $this_field_collection;
+}
+
+/**
+ * Function to load an array of field collection with revision id's.
+ *
+ * @param array $collection_ids
+ *   An array of field collection ID's and revision IDs. e.g.
+ *   array(
+ *     array("value" => 176322, "revision_id" => 872634),
+ *     array("value" => 176323, "revision_id" => 872635)
+ *   )
+ *
+ * @return array
+ *   An array of field collection items at their latest revision.
+ */
+function everyday_tools_field_collection_load_multiple($collection_ids) {
+
+  $field_collection_array = entity_load('field_collection_item', $collection_ids);
+
+  return $field_collection_array;
+}

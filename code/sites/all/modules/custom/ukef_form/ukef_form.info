@@ -1,0 +1,4 @@
+name = UKEF Form
+description = A module for customising forms.
+package = UKEF
+core = 7.x

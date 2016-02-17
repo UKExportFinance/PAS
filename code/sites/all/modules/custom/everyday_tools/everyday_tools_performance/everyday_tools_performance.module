@@ -1,0 +1,78 @@
+<?php
+
+/**
+ * @file
+ * The Everyday Tools module was created to house functions that are useful in
+ * every Drupal build that requires some degree of development.
+ * The functions in this module are for Site Performance
+ */
+
+// Include dBug for debugging purposes on development servers.
+if (variable_get("everyday_tools_environment") == 'dev') {
+  include 'includes/appgati.class.php';
+}
+else {
+  include 'includes/appgatiLive.class.php';
+}
+
+/**
+ * Check the pages load time
+ * Usage $loadtime = new loadTime();
+ */
+class LoadTime {
+  private $timeStart = 0;
+  private $timeEnd = 0;
+  private $time = 0;
+
+  /**
+   * Class Contstuctor which creates a start time.
+   */
+  public function __construct() {
+    $this->timeStart = microtime(TRUE);
+  }
+
+  /**
+   * Class Decontstuctor which creates an end time.
+   */
+  public function __destruct() {
+    $this->timeEnd = microtime(TRUE);
+    $this->time = ($this->timeEnd - $this->timeStart) / 60;
+    echo '<div class="loadTime">Loaded in ' . $this->time . ' seconds</div>';
+  }
+}
+
+/**
+ * Appgati Class Usage
+ * 
+ * Add appgati.
+ * require_once 'appgati.class.php';
+ * 
+ * // Initialize
+ * $app = new AppGati();
+ * 
+ * // Add step.
+ * // A step should be a continous string.
+ * $app->Step('1');
+ * 
+ * // Do some code...
+ * 
+ * // Add another step.
+ * $app->Step('2');
+ * 
+ * // Do some code...
+ * 
+ * // Add another step.
+ * $app->Step('3');
+ * 
+ * // Generate report between steps 1 and 2.
+ * // Input the steps sequentially as strings for correct reports.
+ * $report1 = $app->Report('1', '2');
+ * // Generate report between steps 2 and 3.
+ * $report2 = $app->Report('2', '3');
+ * 
+ * // Display reports
+ * new dBug($report1);
+ * new dBug($report2);
+ * 
+ * 
+ */

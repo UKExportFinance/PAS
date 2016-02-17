@@ -1,0 +1,27 @@
+<?php
+
+/**
+ * @file
+ * The Everyday Tools module was created to house functions that are useful 
+ * in every Drupal build that requires some degree of development. 
+ * The functions in this module are for User Actions
+ */
+
+/**
+ * Renders beans.
+ *
+ * @param int $bean_id
+ *   Integer specifying the bean id.
+ *
+ * @return string
+ *   Rendered block
+ */
+function everyday_tools_bean_render($bean_id) {
+  $bean = bean_load($bean_id);
+  if (FALSE !== $bean) {
+    return drupal_render(bean_view($bean));
+  }
+  else {
+    return '';
+  }
+}

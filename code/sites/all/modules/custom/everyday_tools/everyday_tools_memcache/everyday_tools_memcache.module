@@ -1,0 +1,306 @@
+<?php
+
+/**
+ * @file
+ * The Everyday Tools module was created to house functions that are useful 
+ * in every Drupal build that requires some degree of development. 
+ * The functions in this module are for Memcache and allowing you to cache
+ * further blocks of content or data to save on server load every page load.
+ * 
+ * @author
+ * Adam Bushell
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function everyday_tools_memcache_menu() {
+  $items['admin/config/everyday-tools/memcache'] = array(
+    'title' => 'Everyday Tools Memcache',
+    'description' => 'Everyday Tools Memcache',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('everyday_tools_memcache_form'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/everyday-tools/memcache/flush-all-items'] = array(
+    'title' => 'Clear Mencache',
+    'page callback' => 'everyday_tools_memcache_flush',
+    'access arguments' => array('flush memcache'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function everyday_tools_memcache_permission() {
+  return array(
+    'flush memcache' => array(
+      'title' => t('Flush Memcache'),
+      'description' => t('Access links to flush caches in the administration menu.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_flush_caches().
+ */
+function everyday_tools_memcache_flush_caches() {
+  everyday_tools_memcache_flush();
+}
+
+/**
+ * Create Configuration Form.
+ *
+ * @return array
+ *   The system setting form.
+ */
+function everyday_tools_memcache_form() {
+  drupal_add_js(drupal_get_path('module', 'system') . '/system.js');
+
+  $form['clear_cache'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Clear cache'),
+  );
+  $form['clear_cache']['clear'] = array(
+    '#type' => 'submit',
+    '#value' => t('Clear memcache'),
+    '#submit' => array('everyday_tools_memcache_flush'),
+  );
+
+  $form['everyday_tools_memcache'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Caching'),
+  );
+  $form['#submit'] = array('everyday_tools_memcache_form_submit');
+  $form['everyday_tools_memcache']['intro'] = array(
+    '#markup' => '<h1>' . t('Configuration options for Everyday Tools Memcache.') . '</h1>',
+  );
+  $form["everyday_tools_memcache"]["everyday_tools_memcache_server"] = array(
+    '#title' => t('Memcache Server'),
+    '#type' => 'textfield',
+    '#size' => 20,
+    '#maxlength' => 256,
+    '#description' => t('The Memcache server to connect to'),
+    '#default_value' => variable_get('everyday_tools_memcache_server', 'localhost'),
+    '#required' => TRUE,
+  );
+  $form["everyday_tools_memcache"]["everyday_tools_memcache_server_port"] = array(
+    '#title' => t('Memcache Port'),
+    '#type' => 'textfield',
+    '#size' => 8,
+    '#maxlength' => 8,
+    '#description' => t('The Memcache server port to connect to'),
+    '#default_value' => variable_get('everyday_tools_memcache_server_port', '11211'),
+    '#required' => TRUE,
+  );
+  $form['everyday_tools_memcache']['everyday_tools_memcache_enabled'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Everyday Tools Memcache enabled'),
+    '#description' => t('Disable this if you would like prevent your custom blocks of code from being cached.'),
+    '#default_value' => intval(variable_get('everyday_tools_memcache_enabled', 0)),
+  );
+  $form["everyday_tools_memcache"]["everyday_tools_memcache_prefix"] = array(
+    '#title' => t('Memcache Prefix'),
+    '#type' => 'textfield',
+    '#size' => 20,
+    '#maxlength' => 20,
+    '#description' => t('The Memcache prefix to use'),
+    '#default_value' => variable_get('everyday_tools_memcache_prefix', ''),
+  );
+  $form['everyday_tools_memcache']['everyday_tools_memcache_compressed'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Memcache Compressed'),
+    '#description' => t('Use MEMCACHE_COMPRESSED to store the item compressed (uses zlib).'),
+    '#default_value' => intval(variable_get('everyday_tools_memcache_compressed', 0)),
+  );
+  $form['everyday_tools_memcache']['everyday_tools_memcache_https_enabled'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Memcache HTTPS enabled'),
+    '#description' => t('Is memcache enabled over HTTPS?'),
+    '#default_value' => intval(variable_get('everyday_tools_memcache_https_enabled', 0)),
+  );
+  return system_settings_form($form);
+}
+
+/**
+ * Submit function for administration form.
+ *
+ * @param array $form
+ *   The page form.
+ * @param array $form_state
+ *   The current form state.
+ */
+function everyday_tools_memcache_form_submit($form, &$form_state) {
+}
+
+/**
+ * Submit function for administration form.
+ *
+ * @param array $form
+ *   The page form.
+ * @param array $form_state
+ *   The current form state.
+ */
+function everyday_tools_memcache_form_validate($form, &$form_state) {
+  if (isset($form_state['values']['everyday_tools_memcache_server_port']) && !is_numeric($form_state['values']['everyday_tools_memcache_server_port'])) {
+    form_set_error('everyday_tools_memcache_server_port', t('The port must be an integer.'));
+  }
+}
+
+/**
+ * Function to get the memcache connection.
+ * 
+ * @param Integer $memcache_host
+ *   Alternative Memcahce Host Address can be specified else a default value 
+ *   from settings.php is used
+ * @param Integer $memcache_port
+ *   Alternative Port number can be specified else a default value from 
+ *   settings.php is used
+ * 
+ * @return mixed
+ *   Returns the connection object if a connection can be made
+ *   Returns FALSE if no connection can be made
+ */
+function everyday_tools_memcache_connect($memcache_host = FALSE, $memcache_port = FALSE) {
+  static $failed_connection = FALSE;
+
+  if ($memcache_host === FALSE) {
+    $memcache_host = variable_get('everyday_tools_memcache_server');
+  }
+  if ($memcache_port === FALSE) {
+    $memcache_port = variable_get('everyday_tools_memcache_server_port');
+  }
+
+  if (1 <> variable_get('everyday_tools_memcache_enabled')) {
+    return FALSE;
+  }
+
+  $connection = memcache_connect($memcache_host, $memcache_port);
+
+  if ($connection === FALSE && $failed_connection === FALSE) {
+    // The first time the connection fails per page load add an alert rather
+    // than each time.
+    watchdog('memcache', 'Can\'t connect to the memcache server.');
+    $failed_connection = TRUE;
+
+    // Empty object.
+    class EmptyObj {
+      /**
+       * Blank empty Getter.
+       * 
+       * @return bool
+       *   FALSE
+       */
+      public function get() {
+        return FALSE;
+      }
+
+      /**
+       * Blank empty Setting.
+       * 
+       * @return bool
+       *   FALSE
+       */
+      public function set() {
+        return FALSE;
+      }
+
+      /**
+       * Blank empty Setting.
+       * 
+       * @return bool
+       *   FALSE
+       */
+      public function replace() {
+        return FALSE;
+      }
+    }
+
+    $empty_obj = new EmptyObj();
+    return $empty_obj;
+  }
+
+  return $connection;
+}
+
+/**
+ * Function to flush memcache.
+ */
+function everyday_tools_memcache_flush() {
+
+  // Emtpy all caches.
+  try {
+    // Memcache.
+    $memcache_connect = everyday_tools_memcache_connect();
+    if ($memcache_connect !== FALSE) {
+      memcache_flush($memcache_connect);
+    }
+  }
+  catch (Exception $e) {
+
+  }
+}
+
+/**
+ * Function for getting data from memcache.
+ *
+ * @param object $memcache_connection
+ *   Existing Memcache connection.
+ * @param string $key
+ *   Cache key.
+ *
+ * @return mixed
+ *   Will return either FAlSE if no cache, or cached item.
+ */
+function everyday_tools_memcache_get($memcache_connection, $key) {
+
+  // Append the prefix (if set).
+  $key = variable_get('everyday_tools_memcache_prefix') . $key;
+
+  if ($memcache_connection) {
+    $value = $memcache_connection->get($key);
+    if ($value) {
+      return $value;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Function for setting data to memcache.
+ *
+ * @param object $memcache_connection
+ *   Existing Memcache connection.
+ * @param string $key
+ *   Cache key.
+ * @param mixed $value
+ *   Value to cache.
+ * @param int $timestamp
+ *   Timestamp of the items last changed date.
+ * @param int $expiry
+ *   When to expire the item.
+ */
+function everyday_tools_memcache_set($memcache_connection, $key, $value, $timestamp = 0, $expiry = 0) {
+
+  // Append the prefix (if set).
+  $key = variable_get('everyday_tools_memcache_prefix') . $key;
+
+  if (is_object($memcache_connection)) {
+    $cached = array(
+      'value' => $value,
+      'timestamp' => (0 <> $timestamp) ? $timestamp : time(),
+    );
+
+    $compress_memcache = variable_get('everyday_tools_memcache_compressed') ? MEMCACHE_COMPRESSED : FALSE;
+
+    if ((!isset($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === FALSE || variable_get('everyday_tools_memcache_https_enabled') == TRUE)) {
+      $replaced = $memcache_connection->replace($key, $cached, $compress_memcache, $expiry);
+      if (!$replaced) {
+        $memcache_connection->set($key, $cached, $compress_memcache, $expiry);
+      }
+    }
+  }
+}

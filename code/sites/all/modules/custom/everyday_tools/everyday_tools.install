@@ -1,0 +1,22 @@
+<?php
+
+/**
+ * @file
+ * Install file for Everyday Tools Menu module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function everyday_tools_install() {
+  // Create variable.
+  variable_set('everyday_tools_environment', 'live');
+}
+
+/**
+ * Implements hook_install().
+ */
+function everyday_tools_uninstall() {
+  // Delete variable.
+  variable_del('everyday_tools_environment');
+}

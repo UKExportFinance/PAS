@@ -1,0 +1,17 @@
+// Phase banner
+// ==========================================================================
+
+@import '_design-patterns/alpha-beta';
+
+.phase-banner {
+  @include phase-banner(alpha);
+}
+
+// If you need a phase banner, put this inside the main content area
+// See elements _layout.scss line 22.
+.phase-banner-alpha  {
+  @include phase-banner(alpha); // Change this to (beta) for a beta banner
+}
+.phase-tag-alpha {
+  @include phase-tag(alpha); // Change this to (beta) for a beta tag
+}

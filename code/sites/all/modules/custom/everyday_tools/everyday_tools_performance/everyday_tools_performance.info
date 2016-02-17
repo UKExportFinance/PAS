@@ -1,0 +1,6 @@
+name = Everyday tools - Performance Functions
+description = A lightweight module containing helper functions for site performance
+package = "Everyday Tools"
+core = 7.x
+
+dependencies[] = everyday_tools

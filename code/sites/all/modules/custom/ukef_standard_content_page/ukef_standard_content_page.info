@@ -1,0 +1,7 @@
+name = UKEF Standard content page
+description = A module for customising Standard content page.
+package = UKEF
+core = 7.x
+
+dependencies[] = everyday_tools
+dependencies[] = registered_variables

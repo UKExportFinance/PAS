@@ -1,0 +1,8 @@
+name = UKEF EXIP Form page
+description = A module for customising EXIP Form page.
+package = UKEF
+core = 7.x
+
+dependencies[] = everyday_tools
+dependencies[] = registered_variables
+dependencies[] = webform

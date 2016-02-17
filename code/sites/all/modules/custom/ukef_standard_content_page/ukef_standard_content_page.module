@@ -1,0 +1,88 @@
+<?php
+/**
+ * @file
+ * A module for customising Standard content page.
+ *
+ * @author
+ * Marek Maciusowicz <marek.maciusowicz@readingroom.com>
+ */
+
+/**
+ * Implements hook_registered_variables_alter().
+ */
+function ukef_standard_content_page_registered_variables_alter(&$variables) {
+  $variables->set(
+    array(
+      'callback' => 'ukef_standard_content_page_set_variables',
+      'conditions' => array(
+        'component_type' => 'node',
+        'type' => array(
+          'standard_content_page',
+        ),
+      ),
+    )
+  );
+}
+
+/**
+ * Function for setting variables for Standard content page.
+ *
+ * @param object $context
+ *   Entity object.
+ *
+ * @return array
+ *   Array of variables to register.
+ */
+function ukef_standard_content_page_set_variables($context) {
+  $title = $context->title;
+
+  $intro_section = (isset($context->field_intro_section)
+  && $context->field_intro_section) ?
+  everyday_tools_get_field_value($context, 'field_intro_section', 0) : NULL;
+
+  $upper_body_section_heading = (isset($context->field_upper_body_section_heading)
+  && $context->field_upper_body_section_heading) ?
+  everyday_tools_get_field_value($context, 'field_upper_body_section_heading', 0) : NULL;
+
+  $upper_body_section = (isset($context->field_upper_body_section)
+  && $context->field_upper_body_section) ?
+  everyday_tools_get_field_value($context, 'field_upper_body_section', 0) : NULL;
+
+  $call_to_action_button_text = (isset($context->field_call_to_action_button_text)
+  && $context->field_call_to_action_button_text) ?
+  everyday_tools_get_field_value($context, 'field_call_to_action_button_text', 0) : NULL;
+
+  $call_to_action_button_link = (isset($context->field_call_to_action_button_link)
+  && $context->field_call_to_action_button_link) ?
+  drupal_get_path_alias('node/' . everyday_tools_get_raw_value('field_call_to_action_button_link', $context, 'target_id')) : NULL;
+
+  $lower_body_section_heading = (isset($context->field_lower_body_section_heading)
+  && $context->field_lower_body_section_heading) ?
+  everyday_tools_get_field_value($context, 'field_lower_body_section_heading', 0) : NULL;
+
+  $lower_body_section = (isset($context->field_lower_body_section)
+  && $context->field_lower_body_section) ?
+  everyday_tools_get_field_value($context, 'field_lower_body_section', 0) : NULL;
+
+  $extra_components = array();
+
+  $extra_components['keys'] = (isset($context->field_extra_components)
+  && $context->field_extra_components) ?
+  everyday_tools_get_raw_value_multiple('field_extra_components', $context, 'value') : array();
+
+  $extra_components['components'] = array();
+
+  drupal_alter('ukef_standard_content_page', $extra_components);
+
+  return array(
+    'title' => $title,
+    'intro_section' => $intro_section,
+    'upper_body_section_heading' => $upper_body_section_heading,
+    'upper_body_section' => $upper_body_section,
+    'call_to_action_button_text' => $call_to_action_button_text,
+    'call_to_action_button_link' => $call_to_action_button_link,
+    'lower_body_section_heading' => $lower_body_section_heading,
+    'lower_body_section' => $lower_body_section,
+    'extra_components' => $extra_components,
+  );
+}

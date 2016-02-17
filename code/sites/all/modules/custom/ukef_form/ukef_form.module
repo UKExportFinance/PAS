@@ -1,0 +1,68 @@
+<?php
+/**
+ * @file
+ * A module for customising forms.
+ *
+ * @author
+ * Marek Maciusowicz <marek.maciusowicz@readingroom.com>
+ */
+
+/**
+ * Implements hook_theme().
+ */
+function ukef_form_theme($existing, $type, $theme, $path) {
+  $hooks = array(
+    'ukef_form_element' => array(
+      'render element' => 'element',
+      'template' => 'templates/field',
+    ),
+  );
+
+  return $hooks;
+}
+
+/**
+ * Add hook suggestions for form element.
+ */
+function ukef_form_preprocess_form_element(&$variables) {
+  global $theme;
+
+  if ($theme == 'ukef') {
+    switch ($variables['element']['#name']) {
+      case 'pass':
+        $variables['element']['#guidance'] = $variables['element']['#description'];
+
+        unset($variables['element']['#description']);
+
+        break;
+    }
+
+    // Prepare field for rendering.
+    $attributes = array();
+
+    // Add element #id for #type 'item'.
+    if (isset($element['#markup']) && !empty($element['#id'])) {
+      $attributes['id'] = $element['#id'];
+    }
+
+    $variables['attributes'] = implode(' ', $attributes);
+
+    // Add element's #type and #name as class to aid with JS/CSS selectors.
+    $classes = array('form-item');
+    if (!empty($variables['element']['#type'])) {
+      $classes[] = 'form-type-' . strtr($variables['element']['#type'], '_', '-');
+    }
+    if (!empty($variables['element']['#name'])) {
+      $classes[] = 'form-item-' . strtr($variables['element']['#name'], array(' ' => '-', '_' => '-', '[' => '-', ']' => ''));
+    }
+
+    // Add a class for disabled elements to facilitate cross-browser styling.
+    if (!empty($variables['element']['#attributes']['disabled'])) {
+      $classes[] = 'form-disabled';
+    }
+
+    $variables['classes'] = implode(' ', $classes);
+
+    $variables['theme_hook_suggestions'][] = 'ukef_form_element';
+  }
+}

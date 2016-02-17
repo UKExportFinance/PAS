@@ -1,0 +1,63 @@
+<?php
+/**
+ * @file
+ * A module for customising Dashboard component.
+ *
+ * @author
+ * Marek Maciusowicz <marek.maciusowicz@readingroom.com>
+ */
+
+/**
+ * Provide details for extra components.
+ *
+ * @param array $extra_components
+ *   Extra components details.
+ */
+function ukef_dashboard_ukef_standard_content_page_alter(&$extra_components) {
+  global $user;
+
+  $applications = NULL;
+  
+  if (in_array('applications', $extra_components['keys'])) {
+
+    module_load_include('inc', 'webform', 'includes/webform.submissions');
+
+    $applications = array(
+      'completed' => array(),
+      'draft' => array(),
+    );
+
+    $filters = array();
+
+    // Modify this part to add different filters for viewing applications
+    // as a broker, UKEF staff etc.
+    $filters['uid'] = $user->uid;
+
+    $submissions = webform_get_submissions($filters);
+
+    foreach ($submissions as $sid => $submission) {
+      $node = node_load($submission->nid);
+
+      $submission_info = webform_extras_get_submission_info($submission);
+
+      $prefix = (isset($node->field_prefix) && $node->field_prefix) ? everyday_tools_get_field_value($node, 'field_prefix', 0) : '';
+
+      $submission_info['id'] = $prefix . $submission->serial;
+
+      $submission_info['title'] = $submission_info['author']['company_name'] . ' ' . $node->title;
+
+      $path_alias = drupal_get_path_alias('node/' . $node->nid);
+
+      $submission_info['link'] = $path_alias . '?application_sid=' . $sid;
+
+      if ($submission->is_draft) {
+        $applications['draft'][] = $submission_info;
+      }
+      else {
+        $applications['completed'][] = $submission_info;
+      }
+    }
+  }
+
+  $extra_components['components']['applications'] = $applications;
+}

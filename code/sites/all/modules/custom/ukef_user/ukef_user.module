@@ -1,0 +1,131 @@
+<?php
+/**
+ * @file
+ * A module for customising user functionality.
+ *
+ * @author
+ * Marek Maciusowicz <marek.maciusowicz@readingroom.com>
+ */
+
+/**
+ * Implements hook_registered_variables_alter().
+ */
+function ukef_user_registered_variables_alter(&$variables) {
+  $variables->set(
+    array(
+      'callback' => 'ukef_user_header_set_variables',
+      'conditions' => array(
+        'component_type' => 'bean',
+        'delta' => array(
+          'header',
+        ),
+      ),
+    )
+  );
+}
+
+/**
+ * Function for setting variables for Header page.
+ *
+ * @param object $context
+ *   Entity object.
+ *
+ * @return array
+ *   Array of variables to register.
+ */
+function ukef_user_header_set_variables($context) {
+  global $user;
+
+  $user_details = ukef_user_get_user_details($user);
+
+  return array(
+    'user_details' => $user_details,
+  );
+}
+
+/**
+ * Implements hook_preprocess_page().
+ */
+function ukef_user_preprocess_page(&$variables) {
+  $status = drupal_get_http_header("status");
+
+  if ($status != 404
+  && (!array_key_exists('logged_in', $variables)
+  || $variables['logged_in'] != TRUE)) {
+    $current_path = current_path();
+
+    $current_path_chunks = explode('/', $current_path);
+
+    if (!array_key_exists(0, $current_path_chunks)
+    || $current_path_chunks[0] != 'user'
+    && $current_path_chunks[0] != 'admin') {
+      drupal_goto('user');
+    }
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function ukef_user_form_alter(&$form, &$form_state, $form_id) {
+  switch ($form_id) {
+    case 'user_login':
+      $form['#action']='/user/login?destination=/';
+
+      break;
+  }
+}
+
+/**
+ * Get user details.
+ *
+ * @param object $user
+ *   User object.
+ *
+ * @return array
+ *   Simplified user details.
+ */
+function ukef_user_get_user_details($user) {
+  $user_details = array(
+    'company_name' => NULL,
+    'first_name' => NULL,
+    'last_name' => NULL,
+    'user_surname' => NULL,
+    'logged_in' => FALSE,
+  );
+
+  if ($user->uid == 0) {
+    return $user_details;
+  }
+
+  $user_full = user_load($user->uid);
+
+  if ($user_full) {
+    $user_details['logged_in'] = TRUE;
+
+    $user_details['first_name'] = (isset($user_full->field_user_name)
+    && $user_full->field_user_name) ?
+    everyday_tools_get_field_value($user_full, 'field_user_name', 0, 'user') : '';
+
+    $user_details['last_name'] = (isset($user_full->field_user_surname)
+    && $user_full->field_user_surname) ?
+    everyday_tools_get_field_value($user_full, 'field_user_surname', 0, 'user') : '';
+
+    $user_details['full_name'] = $user_details['first_name'] . ' ' . $user_details['last_name'];
+
+    $user_type = (isset($user_full->field_user_type)
+    && $user_full->field_user_type) ?
+    everyday_tools_get_raw_value('field_user_type', $user_full, 'value', 'user') : NULL;
+
+    switch ($user_type) {
+      case 'exporter':
+        $user_details['company_name'] = (isset($user_full->field_company_name_exporter)
+        && $user_full->field_company_name_exporter) ?
+        everyday_tools_get_field_value($user_full, 'field_company_name_exporter', 0, 'user') : '';
+
+        break;
+    }
+  }
+
+  return $user_details;
+}

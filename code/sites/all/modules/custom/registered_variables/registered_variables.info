@@ -1,0 +1,4 @@
+name = Registered Variables
+description = A module for registering variables to be passed to specific entities and views.
+package = Registered Variables
+core = 7.x

@@ -1,0 +1,50 @@
+<?php
+/**
+ * @file
+ * A module for customising EXIP Form page.
+ *
+ * @author
+ * Marek Maciusowicz <marek.maciusowicz@readingroom.com>
+ */
+
+/**
+ * Implements hook_registered_variables_alter().
+ */
+function ukef_exip_form_page_registered_variables_alter(&$variables) {
+  $variables->set(
+    array(
+      'callback' => 'ukef_exip_form_page_set_variables',
+      'conditions' => array(
+        'component_type' => 'node',
+        'type' => array(
+          'exip_form_page',
+        ),
+      ),
+    )
+  );
+}
+
+/**
+ * Function for setting variables for EXIP Form page.
+ *
+ * @param object $context
+ *   Entity object.
+ *
+ * @return array
+ *   Array of variables to register.
+ */
+function ukef_exip_form_page_set_variables($context) {
+  $title = $context->title;
+
+  // Get webform data.
+  $block = module_invoke('webform', 'block_view', 'client-block-' . $context->nid);
+
+  $webform = render($block['content']);
+
+  $webform_html = ($webform) ? render($webform) : '';
+
+  return array(
+    'title' => $title,
+    'webform_html' => $webform_html,
+  );
+}

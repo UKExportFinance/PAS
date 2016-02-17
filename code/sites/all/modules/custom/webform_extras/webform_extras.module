@@ -1,0 +1,704 @@
+<?php
+/**
+ * @file
+ * A module adding extra functionality to webforms.
+ *
+ * @author
+ * Adam Bushell <adam.bushell@readingroom.com>
+ * Marek Maciusowicz <marek.maciusowicz@readingroom.com>
+ */
+
+/**
+ * Implements hook_webform_component_render_alter().
+ */
+function webform_extras_webform_component_render_alter(&$element, &$component) {
+  // Suppress validation of required components.
+  if (isset($element['#required']) && $element['#required']) {
+    $element['#required'] = 0;
+
+    $element['#required_marker'] = TRUE;
+  }
+
+  if (isset($element['#attributes']['required'])) {
+    unset($element['#attributes']['required']);
+  }
+}
+
+/**
+ * Get form errors.
+ *
+ * @param array $form
+ *   Form data.
+ * @param array $form_state
+ *   Form state data.
+ * @param int $page_number
+ *   Specific page for which to get errors.
+ *
+ * @return array
+ *   Errors.
+ */
+function webform_extras_get_errors($form, $form_state, $page_number = NULL) {
+  $errors = array();
+
+  // Store existing errors.
+  $existing_errors = form_get_errors();
+
+  // Clear errors, as they are going to be reinstated later.
+  form_clear_error();
+
+  // Get current state of the submission including form_state values.
+  $submission_current_state = webform_extras_get_submission_current_state($form, $form_state);
+
+  $components = $form['#node']->webform['components'];
+
+  // Check which fields are ignored through conditionals.
+  $ignored_cids = array();
+
+  $conditionals = $form['#node']->webform['conditionals'];
+
+  foreach ($conditionals as $conditional) {
+    $add_to_ignore = FALSE;
+
+    if (count($conditional['rules'])) {
+      $add_to_ignore = TRUE;
+    }
+
+    foreach ($conditional['rules'] as $rule) {
+      $source_cid = $rule['source'];
+
+      if (array_key_exists($source_cid, $submission_current_state->data)) {
+        $source_value = $submission_current_state->data[$source_cid];
+
+        if ($source_value) {
+          switch ($rule['operator']) {
+            case 'equal':
+              if ($source_value[0] == $rule['value']) {
+                $add_to_ignore = FALSE;
+              }
+
+              break;
+          }
+        }
+      }
+    }
+
+    if ($add_to_ignore) {
+      foreach ($conditional['actions'] as $action) {
+        switch ($action['action']) {
+          case 'show':
+            $ignored_cids[] = $action['target'];
+
+            break;
+        }
+      }
+    }
+  }
+
+  // Scan for errors and add error messages to output.
+  foreach ($components as $cid => $component) {
+    // If ignored, skip.
+    if (in_array($cid, $ignored_cids)) {
+      continue;
+    }
+
+    // If page number is given, check if component is on the given page. If not,
+    // skip checks on this component.
+    if ($page_number) {
+      if ($page_number != $component['page_num']) {
+        continue;
+      }
+    }
+
+    // Determine step key.
+    $step_key = 'step' . $component['page_num'];
+
+    // Set up an empty array for a given step if one does not exist yet.
+    if (!array_key_exists($step_key, $errors)) {
+      $errors[$step_key] = array();
+    }
+
+    if (isset($submission_current_state->data)
+    && $submission_current_state->data
+    && array_key_exists($cid, $submission_current_state->data)) {
+      $form_key = $component['form_key'];
+
+      $suppress_existing_errors = FALSE;
+
+      // Perform checks.
+      if (isset($submission_current_state->data[$cid])) {
+        $value = $submission_current_state->data[$cid];
+
+        $merged_value = '';
+        // Merge child items if value[0] is an array.
+        if (is_array($value[0])) {
+          foreach ($value[0] as $sub_key => $sub_value) {
+            if (!array_key_exists('extra', $component)
+            || !array_key_exists('exclude', $component['extra'])
+            || !in_array($sub_key, $component['extra']['exclude'])) {
+              $merged_value .= $sub_value;
+            }
+          }
+        }
+        else {
+          $merged_value = $value[0];
+        }
+
+        // Perform special fields validation.
+        $field = array(
+          'component' => $component,
+          'step_key' => $step_key,
+          'value' => $value,
+        );
+
+        $skip = FALSE;
+
+        drupal_alter('webform_extras_validate_special', $errors, $field, $skip);
+
+        if ($skip) {
+          continue;
+        }
+
+        // Perform regular fields validation.
+        if ($component['required'] == 1) {
+          if (strlen($merged_value) == 0) {
+            $errors[$step_key][] = array(
+              'cid' => $cid,
+              'form_key' => $form_key,
+              'message' => $components[$cid]['name'] . ' is required.',
+              'stop' => FALSE,
+            );
+
+            $suppress_existing_errors = TRUE;
+          }
+          else {
+            // Type based validation.
+            switch ($component['type']) {
+              case 'date':
+                if (is_array($value[0])) {
+                  $date_array = $value[0];
+                }
+                else {
+                  $date_array = explode('-', $value[0]);
+                }
+
+                foreach ($date_array as $date_part) {
+                  if (!is_numeric($date_part)) {
+                    $errors[$step_key][] = array(
+                      'cid' => $cid,
+                      'form_key' => $form_key,
+                      'message' => $components[$cid]['name'] . ' has to contain numbers only.',
+                      'stop' => TRUE,
+                    );
+
+                    $suppress_existing_errors = TRUE;
+
+                    break;
+                  }
+                }
+
+                break;
+
+              case 'number':
+                $invalid = TRUE;
+
+                if ($value
+                && array_key_exists(0, $value)) {
+                  if ($component['extra']['integer']) {
+                    $pattern = '/^-*\d*$/';
+                  }
+                  else {
+                    $pattern = '/^-*[\d\\.]+$/';
+                  }
+
+                  if (preg_match($pattern, $value[0])) {
+                    $invalid = FALSE;
+                  }
+                }
+
+                if ($invalid) {
+                  $errors[$step_key][] = array(
+                    'cid' => $cid,
+                    'form_key' => $form_key,
+                    'message' => $components[$cid]['name'] . ' has to contain numbers only.',
+                    'stop' => TRUE,
+                  );
+
+                  $suppress_existing_errors = TRUE;
+                }
+
+                break;
+            }
+          }
+        }
+      }
+
+      // If errors already exist, add them.
+      if (!$suppress_existing_errors
+      && isset($existing_errors)
+      && is_array($existing_errors)
+      && array_key_exists($form_key, $form['submitted'])) {
+        $element = $form['submitted'][$form_key];
+
+        if (array_key_exists('#parents', $element)) {
+          $trail = implode('][', $element['#parents']);
+
+          if (array_key_exists($trail, $existing_errors)) {
+            // Add error if not a required field error. Required fields are 
+            // taken care of later.
+            if (!strstr($existing_errors[$trail], 'field is required')) {
+              $errors[$step_key][] = array(
+                'cid' => $cid,
+                'form_key' => $form_key,
+                'message' => $existing_errors[$trail],
+                'stop' => TRUE,
+              );
+            }
+          }
+
+          $element_array_keys = array_keys($element);
+
+          foreach ($element_array_keys as $element_array_key) {
+            if (strstr($element_array_key, '#') === FALSE) {
+              $element_sub_key = $trail . '][' . $element_array_key;
+
+              if (array_key_exists($element_sub_key, $existing_errors)) {
+                $errors[$step_key][] = array(
+                  'cid' => $cid,
+                  'form_key' => $form_key,
+                  'message' => $existing_errors[$element_sub_key],
+                  'stop' => TRUE,
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return $errors;
+}
+
+/**
+ * Get submission data updated with form_state values.
+ *
+ * @param array $form
+ *   Form data.
+ * @param array $form_state
+ *   Form state data.
+ *
+ * return object
+ *   Submission data.
+ */
+function webform_extras_get_submission_current_state($form, $form_state) {
+  if (isset($form['#submission'])
+  && $form['#submission']
+  && isset($form['#submission']->sid)) {
+    $sid = $form['#submission']->sid;
+
+    $submission = current(webform_get_submissions(array('sid' => $sid)));
+
+    $submission_mapped = webform_extras_map_submission_data($submission, $submission->nid);
+  }
+  else {
+    $submission_mapped = new stdClass();
+    $submission_mapped->data_field_names = array();
+    $submission_mapped->nid = $form['#node']->nid;
+  }
+
+  $form_state_values = array();
+
+  $form_state_submitted = array_key_exists('values', $form_state) ? $form_state['values']['submitted'] : array();
+
+  webform_extras_get_form_state_values($form['#node']->webform['components'], $form_state['clicked_button'], $form_state_submitted, $form_state_values);
+
+  foreach ($form_state_values as $form_key => $value) {
+    $cid = $value['cid'];
+    $submission_mapped->data[$cid] = $value['value'];
+    $submission_mapped->data_field_names[$form_key] = $value['value'];
+  }
+
+  return $submission_mapped;
+}
+
+function webform_extras_get_submission_info($submission) {
+  module_load_include('inc', 'webform', 'includes/webform.components');
+
+  $info = array();
+
+  $user = user_load($submission->uid);
+
+  $info['author'] = ukef_user_get_user_details($user);
+
+  $info['steps'] = array();
+
+  $node = node_load($submission->nid);
+
+  if (isset($submission->data)
+  && $submission->data
+  && isset($node->webform)
+  && $node->webform) {
+    foreach ($submission->data as $cid => $value) {
+      if (array_key_exists($cid, $node->webform['components'])) {
+        $component = $node->webform['components'][$cid];
+
+        $info['steps']['step' . $component['page_num']][$component['form_key']] = $value;
+      }
+    }
+  }
+
+  return $info;
+}
+
+/**
+ * Get values from form state in a flat array.
+ *
+ * @param array $components
+ *   Webform components.
+ * @param array $form_state_clicked_button
+ *   Clicked buton info.
+ * @param array $form_state_submitted
+ *   Array $form_state['values']['submitted'] or its nested part.
+ * @param array $form_state_values
+ *   Output array.
+ */
+function webform_extras_get_form_state_values($components, $form_state_clicked_button, $form_state_submitted, &$form_state_values) {
+  foreach ($components as $component) {
+    $form_key = $component['form_key'];
+    $cid = $component['cid'];
+
+    switch ($component['type']) {
+      case 'fieldset':
+        if (isset($form_state_submitted[$form_key])) {
+          $value = $form_state_submitted[$form_key];
+
+          webform_extras_get_form_state_values($components, $form_state_clicked_button, $value, $form_state_values);
+        }
+        break;
+
+      case 'hidden':
+      case 'markup':
+      case 'pagebreak':
+        break;
+
+      default:
+        $value_set = FALSE;
+
+        if (isset($form_state_submitted)
+        && is_array($form_state_submitted)) {
+          if (array_key_exists($cid, $form_state_submitted)) {
+            $value = $form_state_submitted[$cid];
+
+            $value_set = TRUE;
+          }
+          elseif (array_key_exists($form_key, $form_state_submitted)) {
+            $value = $form_state_submitted[$form_key];
+
+            $value_set = TRUE;
+          }
+        }
+
+        if ($value_set) {
+          if (array_key_exists('value', $component)) {
+            if (is_array($value)
+            && array_key_exists('value', $value)
+            && array_key_exists('value', $value)) {
+              $value = $value['value'];
+            }
+
+            if (is_array($value)
+            && array_key_exists(0, $value)) {
+              $value = $value[0];
+            }
+
+            $form_state_values[$form_key] = array(
+              'cid' => $component['cid'],
+              'value' => array($value),
+            );
+          }
+        }
+        else {
+          if ($form_state_clicked_button['#id'] != 'edit-submit') {
+            $form_state_values[$form_key] = array(
+              'cid' => $component['cid'],
+              'value' => FALSE,
+            );
+          }
+        }
+        break;
+    }
+  }
+}
+
+/**
+ * Get component mapping between cid and form_key.
+ * 
+ * @param int $nid
+ *   Node ID
+ *
+ * @return array
+ *   Returns an array of component mappings.
+ */
+function webform_extras_get_component_mappings($nid) {
+  $nodes = db_query("
+      SELECT cid, form_key 
+      
+      FROM {webform_component}
+      
+      WHERE nid = :nid
+    ", array(
+      ':nid' => $nid,
+    ))
+    ->fetchAll();
+
+  $total = db_query("SELECT FOUND_ROWS() AS total")->fetchAssoc('total');
+
+  if ($total['total']) {
+    $cid_mapping = array();
+
+    $form_key_mapping = array();
+
+    foreach ($nodes as $node) {
+
+      $cid_mapping[$node->cid] = $node->form_key;
+      $form_key_mapping[$node->form_key] = $node->cid;
+    }
+
+    return array(
+      'total' => $total['total'],
+      'cid' => $cid_mapping,
+      'form_key' => $form_key_mapping,
+    );
+  }
+  return array(
+    'total' => 0,
+    'cid' => array(),
+    'form_key' => array(),
+  );
+}
+
+/**
+ * Map submission data.
+ *
+ * @param object $submission
+ *   Webform submission to be mapped.
+ * @param int $nid
+ *   Node id of the webform host node.
+ *
+ * @return object.
+ *   Mapped subission.
+ */
+function webform_extras_map_submission_data($submission, $nid) {
+  $mappings = webform_extras_get_component_mappings($nid);
+
+  $submission->data_field_names = array();
+
+  foreach ($submission->data as $cid => $value) {
+    $form_key = $mappings['cid'][$cid];
+
+    $submission->data_field_names[$form_key] = $value;
+  }
+
+  return $submission;
+}
+
+
+/**
+ * Get current page errors.
+ *
+ * @param array form
+ *   Form details.
+ * @param array form_state
+ *   Form state details.
+ * @param array errors
+ *   Array of error messages from webform_extras_get_errors.
+ *
+ * @return array
+ *   Current page errors.
+ */
+function webform_extras_get_current_page_errors($form, $form_state, $errors) {
+  $current_page_errors = array();
+
+  if (is_numeric($form['details']['page_num'])
+  && $form['details']['page_num'] == $form['details']['page_count']
+  || $form['details']['page_num']['#value'] == $form['details']['page_count']['#value']) {
+    $x = count($errors);
+
+    for($i = 0; $i < $x; $i++) {
+      $step = $i + 1;
+
+      $step_key = 'step' . $step;
+
+      if (count($errors[$step_key])) {
+        $current_page_errors[$step_key] = $errors[$step_key];
+      }
+    }
+  }
+  else {
+    $step_key = 'step' . $form['details']['page_num']['#value'];
+
+    // Only show errors for fields that have been accessed.
+    foreach ($errors[$step_key] as $error) {
+      if (array_key_exists('values', $form_state)) {
+        if (array_key_exists($error['cid'], $form_state['values']['submitted'])) {
+          $current_page_errors[$step_key][] = $error;
+        }
+        elseif (array_key_exists($error['form_key'], $form_state['values']['submitted'])) {
+          $current_page_errors[$step_key][] = $error;
+        }
+      }
+    }
+  }
+
+  return $current_page_errors;
+}
+
+/**
+ * Modify fields before rendering the form.
+ *
+ * @param array $submitted
+ *   Array of submitted fields.
+ * @param array $current_page_errors
+ *   Current page errors.
+ * @param array $conditional_actions_cids
+ *   Cids of components with conditional actions assigned to them.
+ */
+function webform_extras_modify_fields(&$submitted, $current_page_errors, $conditional_actions_cids = array()) {
+  foreach ($submitted as &$field) {
+    if (is_array($field)) {
+      if (isset($field['#type'])) {
+        // Enable WYSIWYG.
+        if ($field['#type'] == 'textarea') {
+          if (isset($field['#wrapper_attributes'])
+          && in_array('webform-extras-wysiwyg', $field['#wrapper_attributes']['class'])) {
+            $field['#type'] = 'text_format';
+
+            $field['#format'] = 'filtered_html';
+          }
+        }
+      }
+
+      if (array_key_exists('#webform_component', $field)
+      && array_key_exists('cid', $field['#webform_component'])) {
+        // Add error class if necessary.
+        foreach ($current_page_errors as $step_errors) {
+          foreach ($step_errors as $error) {
+            if (array_key_exists('cid', $error)
+            && $error['cid'] == $field['#webform_component']['cid']) {
+              $field['#wrapper_attributes']['class'][] = 'webform-extras-error';
+              break;
+            }
+          }
+        }
+
+        if (in_array($field['#webform_component']['cid'], $conditional_actions_cids)) {
+          $field['#wrapper_attributes']['class'][] = 'webform-extras-conditional-action';
+        }
+      }
+
+      foreach ($field as &$property) {
+        if (is_array($property) && isset($property['#type'])) {
+          $fields = array($property);
+
+          webform_extras_modify_fields($fields, $current_page_errors, $conditional_actions_cids);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Modify progress bar applying a specific theme and making it possible
+ * to navigate between steps using progress bar items.
+ *
+ * @param array $form
+ *   Form data.
+ * @param string $progressbar_theme_hook
+ *   Name of the progressbar theme hook.
+ * @param type $errors
+ *   Array containing error information for the whole form.
+ */
+function webform_extras_modify_progress_bar(&$form, $progressbar_theme_hook, $errors) {
+  if (isset($form['progressbar']) && $form['progressbar']) {
+    if (isset($form['progressbar']) && $form['progressbar']) {
+      $form['progressbar']['#theme'] = $progressbar_theme_hook;
+
+      $numbered_progressbar = TRUE;
+    }
+
+    $form['progressbar']['#steps'] = array();
+
+    // Prepare empty string for class on every step.
+    $x = $form['progressbar']['#page_count'];
+
+    for ($i = 0; $i < $x; $i++) {
+      $form['progressbar']['#steps'][] = array('class' => '');
+    }
+
+    // If there is completion data & appropriate class to completed items.
+    $i = 0;
+
+    foreach ($errors as $step_errors) {
+      if (count($step_errors) == 0) {
+        $form['progressbar']['#steps'][$i]['class'] .= ' completed ';
+      }
+
+      $i++;
+    }
+
+    if (isset($form['progressbar']['#page_labels']) && $form['progressbar']['#page_labels']) {
+      $i = 1;
+
+      foreach ($form['progressbar']['#page_labels'] as $page_label) {
+        $key = str_replace(' ', '_', filter_xss($page_label));
+        $label = $page_label;
+
+        if ($numbered_progressbar) {
+          $label = $i . '. ' . $label;
+        }
+
+        $form['actions'][$key] = array(
+          '#type' => 'submit',
+          '#value' => $label,
+          '#attributes' => array(
+            'class' => array(
+              'hidden',
+            ),
+            'data-page' => $i,
+            'hidden' => 'hidden',
+          ),
+        );
+
+        $i++;
+      }
+    }
+  }
+}
+
+/**
+ * Get cids of components that have conditional actions assigned to them.
+ *
+ * @param int $nid
+ *   Node id of wbeform's host node.
+ *
+ * @return array
+ *   Cids found.
+ */
+function webform_extras_get_conditional_actions_cids($nid) {
+  $cids = array();
+
+  $rows = db_query(
+    "SELECT target
+     FROM {webform_conditional_actions}
+     WHERE nid = :nid
+    ", array(
+      ':nid' => $nid,
+    )
+  )->fetchAll();
+
+  foreach ($rows as $row) {
+    $cids[] = $row->target;
+  }
+
+  return $cids;
+}

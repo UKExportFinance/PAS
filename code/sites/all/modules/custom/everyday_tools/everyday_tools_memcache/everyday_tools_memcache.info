@@ -1,0 +1,8 @@
+name = Everyday tools - Memcache Functions
+description = A lightweight module containing helper functions for Memcache
+package = "Everyday Tools"
+core = 7.x
+version = VERSION
+dependencies[] = everyday_tools
+dependencies[] = memcache
+configure = admin/config/everyday-tools/memcache

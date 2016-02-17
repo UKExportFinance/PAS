@@ -1,0 +1,171 @@
+<?php
+
+/**
+ * @file
+ * The Everyday Tools module was created to house functions that are useful in
+ * every Drupal build that requires some degree of development.
+ * The functions in this module are for Taxonomy
+ */
+
+/**
+ * Returns the raw term name for a given tid.
+ *
+ * @param int $tid
+ *   The Term ID
+ *
+ * @return string
+ *   If the term can be found, the name is returned.
+ *   If the $tid is valid and we haven't found the term, return the given $tid
+ *   Else if the given $tid is invalid return ''
+ */
+function everyday_tools_taxonomy_get_term_name($tid) {
+  if ($tid <> 0) {
+    $term = taxonomy_term_load($tid);
+    if ($term) {
+      return $term->name;
+    }
+    else {
+      return $tid;
+    }
+  }
+  else {
+    return '';
+  }
+}
+
+/**
+ * Returns the taxonomy term url for a given tid.
+ *
+ * @param int $tid
+ *   The term ID
+ * 
+ * @return url
+ *   The URL for the given tid
+ */
+function everyday_tools_taxonomy_get_term_url($tid) {
+  return '/' . drupal_lookup_path('alias', 'taxonomy/term/' . $tid);
+}
+
+/**
+ * Returns the taxonomy terms tid.
+ *
+ * @param string $name
+ *   Taxonomy item name
+ * @param int $vid
+ *   Vocabulary ID
+ * 
+ * return int
+ *   The ID of the taxonomy term
+ */
+function everyday_tools_taxonomy_get_tid_from_name($name, $vid) {
+  static $data = array();
+
+  if (isset($data[$vid]) && isset($data[$vid][$name])) {
+    return $data[$vid][$name];
+  }
+  else {
+    $tid = db_query("SELECT tid FROM {taxonomy_term_data} WHERE vid = :vid AND name = :name", array(':vid' => $vid, ':name' => $name))->fetchField();
+    if (!$tid) {
+      return FALSE;
+    }
+    if (!array_key_exists($vid, $data)) {
+      $data[$vid] = array();
+    }
+    $data[$vid][$name] = $tid;
+    return $tid;
+  }
+}
+
+/**
+ * Function to know if a term exists in a vocab or not.
+ *
+ * @param string $vocab_machine_name
+ *   Takes vocabulary machine name as parameter in which you want to find a term
+ * @param int $tid
+ *   Term id which you want to know if exists or not in the given vocab.
+ *
+ * @return int
+ *   1 tid exists in the vocab.
+ *   0 tid does not exist.
+ *   -1 no vocab found with the given machine name
+ *   2 vocab has no terms inside.
+ */
+function everyday_tools_taxonomy_check_term_exists($vocab_machine_name, $tid) {
+  $vocab = taxonomy_vocabulary_machine_name_load($vocab_machine_name);
+  if (is_object($vocab)) {
+    $term_tree = taxonomy_get_tree($vocab->vid);
+    if (is_array($term_tree) && !empty($term_tree)) {
+      foreach ($term_tree as $key => $value) {
+        $vocab_tids[] = $value->tid;
+      }
+      if (in_array($tid, $vocab_tids)) {
+        return 1;
+      }
+      else {
+        return 0;
+      }
+    }
+    if (empty($term_tree)) {
+      return 2;
+    }
+  }
+  else {
+    return -1;
+  }
+}
+
+/**
+ * Function to create a Taxonomy Term.
+ *
+ * @param string $name
+ *   The name you wish to create a term with.
+ * @param int $vid
+ *   The ID of the the taxonomy term should be part of.
+ * 
+ * @return int
+ *   The ID of the new term.
+ */
+function everyday_tools_taxonomy_create_taxonomy_term($name, $vid) {
+  $term = new stdClass();
+  $term->name = $name;
+  $term->vid = $vid;
+
+  taxonomy_term_save($term);
+
+  return $term->tid;
+}
+
+/**
+ * Checks to see if term exists, if it doesn't it creates the term.
+ * 
+ * @param string $name
+ *   The name of the term you want.
+ * @param int $vocab_id
+ *   The ID of the vocab.
+ * 
+ * @return int.
+ *   The ID of the term given
+ */
+function everyday_tools_taxonomy_check_taxonomy_exists($name, $vocab_id) {
+
+  $term = everyday_tools_taxonomy_get_tid_from_name($name, $vocab_id);
+
+  if (!$term) {
+    $term = everyday_tools_taxonomy_create_taxonomy_term($name, $vocab_id);
+  }
+
+  return $term;
+}
+
+/**
+ * Nice function to find out how deep a term is nested.
+ *
+ * @param int $tid
+ *   The Term id to get the depth of
+ *
+ * @return int
+ *   The number of parent terms in the tree
+ */
+function everyday_tools_taxonomy_get_term_depth($tid) {
+  return count(taxonomy_get_parents_all($tid));
+}

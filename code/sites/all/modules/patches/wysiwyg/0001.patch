@@ -1,0 +1,38 @@
+From be3508a5b86df752a7b79608edfc52c1cf51570e Mon Sep 17 00:00:00 2001
+From: Marek Maciusowicz <marek.maciusowicz@readingroom.com>
+Date: Fri, 11 Dec 2015 12:25:22 +0000
+Subject: [PATCH] Wysiwyg:   - Corrected ckeditor version detection.
+
+---
+ sites/all/modules/contrib/wysiwyg/editors/ckeditor.inc | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/sites/all/modules/contrib/wysiwyg/editors/ckeditor.inc b/sites/all/modules/contrib/wysiwyg/editors/ckeditor.inc
+index fcf168e..a8abddf 100644
+--- a/sites/all/modules/contrib/wysiwyg/editors/ckeditor.inc
++++ b/sites/all/modules/contrib/wysiwyg/editors/ckeditor.inc
+@@ -78,11 +78,19 @@ function wysiwyg_ckeditor_version($editor) {
+     // version:'CKEditor 3.0 SVN',revision:'3665'
+     // version:'3.0 RC',revision:'3753'
+     // version:'3.0.1',revision:'4391'
+-    if (preg_match('@version:\'(?:CKEditor )?([\d\.]+)(?:.+revision:\'([\d]+))?@', $line, $version)) {
++    $version = array();
++
++    if (preg_match('@version:\"(?:CKEditor )?([\d\.]+)(?:.+revision:\"([\d]+))?@', $line, $version)) {
+       fclose($library);
+       // Version numbers need to have three parts since 3.0.1.
+       $version[1] = preg_replace('/^(\d+)\.(\d+)$/', '${1}.${2}.0', $version[1]);
+-      return $version[1] . '.' . $version[2];
++
++      if (count($version) == 3) {
++        return $version[1] . '.' . $version[2];
++      }
++      else {
++        return $version[1];
++      }
+     }
+     $max_lines--;
+   }
+-- 
+1.9.5.msysgit.1
+

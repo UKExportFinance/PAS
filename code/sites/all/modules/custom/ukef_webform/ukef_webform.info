@@ -1,0 +1,6 @@
+name = UKEF Webform
+description = A module for customising webforms.
+package = UKEF
+core = 7.x
+
+dependencies[] = webform

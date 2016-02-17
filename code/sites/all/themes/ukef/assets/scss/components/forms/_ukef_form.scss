@@ -1,0 +1,306 @@
+/*************************************************************
+
+	UKEF Specific styles
+
+*************************************************************/
+form, input, select{
+	//-webkit-appearance:none; 
+	//border-radius: 0;
+}
+.form-6-digit{
+	width: 170px;
+}
+
+.form-item, .form-group{
+    
+	label{
+		@extend .form-label-bold;
+		font-weight: normal;
+	}
+}
+.form-text, .form-select{
+	@extend .form-control;
+}
+
+.password-suggestions{
+  clear: both;
+  padding: 1em;
+}
+.form-textarea, .form-textarea-wrapper textarea{
+	@extend .form-control;
+}
+
+.button-primary, .form-submit{
+	@extend .button;
+}
+.form-managed-file{
+    margin-top: 10px;
+}
+
+input[type="file"]{
+    font-size: 1em;
+    display: block;
+    margin-bottom: 1em;
+    margin-top: 1em;
+    background: $grey-3;
+    padding: 1em;
+    max-width: 87%;
+}
+.form-managed-file .form-file{
+    margin: 1em 0;
+}
+
+.button-save-and-come-back{
+    display: block;
+    margin-bottom: 2em;
+}
+.button-link {
+    position: relative;
+    top: 0.3em;
+    border: 0;
+    padding: 0;
+    background: none;
+    @include core-19;
+    color: $link-colour;
+    text-decoration: underline;
+    cursor: pointer;
+    box-shadow: none;
+
+    &:hover {
+        color: $link-hover-colour;
+        background: 0;
+        text-decoration: none;
+    }
+
+    &:focus {
+        background: 0;
+        outline: 0;
+        color: $link-active-colour;
+    }
+}
+
+label + input[type=checkbox]:checked {
+	background-color: red;
+}
+.form-radios, .form-checkboxes {
+    .form-type-radio, .form-type-checkbox {
+        position: relative;
+        float: left;
+        margin: 2px 40px 4px 0;
+
+        .form-radio, .form-checkbox {
+            position: absolute;
+            top: 19px;
+            left: 14px;
+
+            &:focus {
+                outline: 0;
+            }
+
+            &:checked {
+
+                + .option {
+                    padding: 17px 39px 17px 41px;
+                    border: solid 1px $black;
+                    background-color: $white;
+                }
+            }
+        }
+
+        .option {
+            display: block;
+            padding: 18px 40px 18px 42px;
+            background-color: $grey-3;
+        }
+
+        .option:hover {
+            padding: 17px 39px 17px 41px;
+            border: solid 1px $black;
+            cursor: pointer;
+        }
+    }
+
+    .description {
+        clear: both;
+    }
+}
+
+// Error display.
+.webform-extras-error {
+  border-left: solid 9px #b10e1e;
+  padding-left: 15px;
+  padding-top: .5em;
+  padding-bottom: .5em;
+  }
+
+// Error messages.
+.messages {
+  &.error {
+    border: solid 2px #b10e1e;
+    background: 0;
+    padding: 1em;
+    margin: 1em;
+    color: #0b0c0c;
+
+    @include media(tablet) {
+      padding: 19px;
+      margin: 19px;
+    }
+  }
+}
+.conditional_field{
+    clear: both;
+    border-left-style: solid;
+    border-color: $grey-2;
+    padding: 0.7894736842em;
+    margin-bottom: 0.7894736842em;
+    margin-top: -15px;
+    border-width: 5px;
+    &.webform-extras-error{
+        border-color: $red;
+    }
+    .preview &{
+        border: 0;
+    }
+}
+        
+
+
+.conditional_field_parent{
+    .form-radios{
+        overflow: hidden;
+        .form-group{
+            width: auto;
+            float: left;
+            margin-right: 10px;
+        }
+    }
+}
+
+    .conditional_field_parent{
+        .form-radios{
+            overflow: hidden;
+            .form-group{
+                width: auto;
+                float: left;
+                margin-right: 10px;
+            }
+        }
+    }
+
+
+
+.webform-component-date{
+    .form-item{
+        width: auto;
+        margin-right: 15px;
+        input{
+            width: auto;
+        }
+    }
+}
+
+.webform-element-add-more-table {
+  
+}
+
+.webform-element-add-more-table-td {
+  padding: 12px 0;
+}
+
+.webform-element-add-more-table-checkbox-label {
+  text-align: center;
+  padding: 6px 0 3px;
+  width: 40px;
+  margin-right: 4px;
+  background-color: $grey-3;
+}
+
+.webform-element-add-more-table-text, .webform-element-add-more-table-number {
+  height: 22px;
+  padding: 4px;
+  margin-right: 4px;
+}
+
+.webform-element-add-more-table-select {
+  height: 34px;
+  padding: 0 4px;
+  margin-right: 4px;
+}
+
+.preview{
+    .webform-page{
+        margin-bottom: 0.2em;
+        color: $govuk-blue;
+        text-decoration: underline;
+        font-size: 19px;
+        display: inline-block;
+        cursor: pointer;
+    }
+    .form-item{
+        border-bottom: 1px $grey-3 solid;
+        margin: 0;
+        padding: 16px 0;
+        float: none;
+        font-size: 19px;
+        label{
+            width: 40%;
+            float: left;
+            margin-right: 10%;
+        }
+    }
+    .webform-page-wrapper{
+        .panel{
+            padding-bottom: 3em;
+        }
+    }
+    .add-more-display-item {
+      position: relative;
+      top: 8px;
+      clear: both;
+      font-size: 16px;
+      margin-bottom: 1em;
+    }
+    .add-more-display-item-label {
+      font-size: 16px;
+      padding-left: 1em;
+    }
+    .add-more-display-item-record-label {
+      margin-bottom: 0.5em;
+    }
+    .ukef-fieldset-wrapper {
+        background-color: transparent;
+        padding: 0;
+        margin-bottom: 0;
+    }
+}
+
+details summary:focus {
+    outline: 3px solid #ffbf47;
+}
+
+.webform-element-add-more-record{
+    background-color: $highlight-colour;
+    margin-bottom: 20px;
+    overflow: hidden;
+    .record-header{
+        padding: 1em;
+        overflow: hidden;
+        h3{
+            float: left;
+            font-size: 24px;
+        }
+        a{
+            float: right;
+        }
+    }
+}
+.record-fields{
+    overflow: hidden;
+    padding: 1em 2em;
+}
+
+.ukef-fieldset-wrapper{
+    background-color: $grey-4;
+    padding: 0 2em;
+}

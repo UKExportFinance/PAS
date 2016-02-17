@@ -1,0 +1,1 @@
+Patches made to contrib modudules should but placed in this folder, the actual patch and details.

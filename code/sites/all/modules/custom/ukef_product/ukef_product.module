@@ -1,0 +1,26 @@
+<?php
+/**
+ * @file
+ * A module for customising Product component.
+ *
+ * @author
+ * Marek Maciusowicz <marek.maciusowicz@readingroom.com>
+ */
+
+/**
+ * Provide details for extra components.
+ *
+ * @param array $extra_components
+ *   Extra components details.
+ */
+function ukef_product_ukef_standard_content_page_alter(&$extra_components) {
+  $products = NULL;
+  
+  if (in_array('products', $extra_components['keys'])) {
+    $products = array(
+      'markup' => views_embed_view('products_forms_info'),
+    );
+  }
+
+  $extra_components['components']['products'] = $products;
+}

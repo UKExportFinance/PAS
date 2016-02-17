@@ -1,0 +1,6 @@
+name = UKEF Product
+description = A module for customising Product component.
+package = UKEF
+core = 7.x
+
+dependencies[] = everyday_tools

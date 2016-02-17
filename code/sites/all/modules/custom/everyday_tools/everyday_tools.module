@@ -1,0 +1,1067 @@
+<?php
+
+/**
+ * @file
+ * The Everyday Tools module was created to house functions that are useful in
+ * every Drupal build that requires some degree of development.
+ * The functions range from string manipulation to theme helpers.
+ *
+ * @authors
+ * Adam Bushell <adam.bushell@gmail.com>
+ * James Milward <jim@jimjimm.com>
+ * Paul Rowell <rowell.paul89@gmail.com>
+ * Steve Stotter <steve.stotter64@googlemail.com>
+ */
+
+// Include dBug for debugging purposes on development servers.
+if (variable_get("everyday_tools_environment") == 'dev') {
+  include 'includes/dBug.php';
+}
+else {
+  include 'includes/dBugLive.php';
+}
+
+/**
+ * Implements hook_menu().
+ */
+function everyday_tools_menu() {
+  $items['admin/config/everyday-tools'] = array(
+    'title' => 'Everyday Tools',
+    'description' => 'Everyday Tools',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('everyday_tools_form'),
+    'access arguments' => array('access everyday_tools administration pages'),
+  );
+  $items['admin/config/everyday-tools/index'] = array(
+    'title' => 'Everyday Tools',
+    'description' => 'Everyday Tools',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('everyday_tools_form'),
+    'access arguments' => array('access administration pages'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function everyday_tools_permission() {
+  return array(
+    'access everyday_tools administration pages' => array(
+      'title' => t('Access the Everyday Tools administration'),
+      'description' => t('Allows the user access to the settings pages for Everyday Tools and its sub modules.'),
+    ),
+  );
+}
+
+/**
+ * Create Configuration Form.
+ *
+ * @return array
+ *   The system setting form.
+ */
+function everyday_tools_form() {
+  $form['#submit'] = array('everyday_tools_form_submit');
+  $form['intro'] = array(
+    '#markup' => '<h1>' . t('Configuration options for Everyday Tools.') . '</h1>',
+  );
+  $form["everyday_tools"]['everyday_tools_environment'] = array(
+    "#type" => "select",
+    "#title" => t("What type of environment is this?"),
+    "#default_value" => variable_get("everyday_tools_environment", "live"),
+    "#options" => array(
+      'dev' => t("Development"),
+      'uat' => t("Testing"),
+      'live' => t("Production"),
+    ),
+  );
+  return system_settings_form($form);
+}
+
+/**
+ * Submit function for administration form.
+ *
+ * @param array $form
+ *   The page form.
+ * @param array $form_state
+ *   The current form state.
+ */
+function everyday_tools_form_submit($form, &$form_state) {
+}
+
+/**
+ * Submit function for administration form.
+ *
+ * @param array $form
+ *   The page form.
+ * @param array $form_state
+ *   The current form state.
+ */
+function everyday_tools_form_validate($form, &$form_state) {
+}
+
+/**
+ * Get the current environment setting.
+ * 
+ * @return string
+ *   The current environment setting.
+ */
+function everyday_tools_get_environment() {
+  return variable_get('everyday_tools_environment', 'live');
+}
+
+/**
+ * Get an image url from a field.
+ * 
+ * Returns the url of the requested image relative to the domain name
+ * i.e. /sites/default/files....
+ *
+ * @param string $image_name
+ *   The name of the entity field to retrieve the image from, i.e. 'cover'.
+ * @param object $entity
+ *   The entity object that contains the image
+ * @param string $style_name
+ *   (Optional) If you would like the returned path to have been styled with an 
+ * image style
+ * 
+ * @return string
+ *   The path to the image relative to the domain name 
+ * i.e. /sites/default/files/test.jpg
+ */
+function everyday_tools_get_image($image_name, $entity, $style_name = NULL, $entity_type = 'node') {
+  if (property_exists($entity, 'field_' . $image_name)) {
+    if (!property_exists($entity, 'language')) {
+      $entity->language = 'und';
+    }
+    $image = field_get_items($entity_type, $entity, 'field_' . $image_name, $entity->language);
+    if ($image && $image[0]['uri']) {
+      if ($style_name) {
+        $image = everyday_tools_strip_url(image_style_url($style_name, $image[0]['uri']));
+      }
+      else {
+        $image = everyday_tools_strip_url(file_create_url($image[0]['uri']));
+      }
+      if ($image) {
+        return $image;
+      }
+    }
+  }
+
+  return NULL;
+}
+
+/**
+ * Returns the summary if available or a trimmed version of an entity.
+ *
+ * @param object $entity
+ *   The entity object to retrieve the summary from
+ * @param int $length
+ *   (Optional) The number of characters to trim to 
+ * (The word will be completed prior to trimming.)
+ * @param string $delim
+ *   (Optional) The delimiter to append to the summary if it's trimmed
+ * @param string $field
+ *   (Optional) The field to take the summary from.
+ * 
+ * @return string
+ *   Trimmed string
+ */
+function everyday_tools_summary($entity, $length = 200, $delim = '&hellip;', $field = 'body') {
+  $field = field_get_items('node', $entity, $field, $entity->language);
+
+  if (isset($field[0]['safe_summary'])) {
+    return trim($field[0]['safe_summary']);
+  }
+  elseif (isset($field[0]['value']) && $field[0]['value']) {
+    return everyday_tools_neat_trim(strip_tags($field[0]['value']), $length, $delim);
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ * Strip out the site domain from the string.
+ * 
+ * This is important when adding outputting css, js and image links etc because
+ * having the full URL leads to unnecessary server load.
+ *
+ * @global string $base_url
+ * 
+ * @param string $str
+ *   The URL string
+ * 
+ * @return string
+ *   Stripped URL
+ */
+function everyday_tools_strip_url($str) {
+  global $base_url;
+  return str_replace($base_url, '', $str);
+}
+
+/**
+ * Returns the path to the site theme after the TLD (e.g. .com). 
+ * 
+ * This is useful for inserting theme images etc into template files as it does
+ * so without the full site url, saving unnecessary server load.
+ *
+ * @global string $base_url
+ * @return string
+ *   The base URL
+ */
+function everyday_tools_theme_path() {
+  global $base_url;
+  return str_replace($base_url, '', path_to_theme());
+}
+
+/**
+ * Get all URL parts as an array.
+ * 
+ * Returns an array containing the parts of the request uri with slashes 
+ * trimmed and query removed.
+ * 
+ * The alias() function should be used instead of this in 99% of situations.
+ *
+ * @param string $uri
+ *   The uri to work from, defaults to current (NULL)
+ * 
+ * @return mixed
+ *   URL parts array or NULL if not found
+ */
+function everyday_tools_url_parts($uri = NULL) {
+  if (!$uri) {
+    $uri = explode('?', request_uri());
+    return explode('/', trim($uri[0], '/'));
+  }
+  else {
+    return explode('/', trim($uri, '/'));
+  }
+
+  return NULL;
+}
+
+/**
+ * Use like arg(), this function works off of the alias instead of the path.
+ *
+ * @param int $x
+ *   The part to return
+ * @param string $uri
+ *   The uri to work from, defaults to current (NULL)
+ * 
+ * @return mixed
+ *   Returns a sring of the the URL part or FALSE if not found
+ */
+function everyday_tools_alias($x = NULL, $uri = NULL) {
+  if ($x === NULL) {
+    return implode('/', everyday_tools_url_parts($uri));
+  }
+
+  $parts = everyday_tools_url_parts($uri);
+  if (isset($parts[$x])) {
+    return $parts[$x];
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Formats a variable so it can be inserted into a field.
+ * 
+ * @param array $data
+ *   Data item to use * 
+ * @param string $key
+ *   key of item to find
+ * 
+ * @return array
+ *   The found field
+ */
+function everyday_tools_field_format($data, $key = 'value', $range = FALSE, $lang = LANGUAGE_NONE, $format = 'none') {
+  $x = 0;
+  $field = array($lang => array());
+  if (!is_array($data)) {
+    $data = array($data);
+  }
+
+  foreach ($data as $item) {
+    $x++;
+    if ($range) {
+      if ($x > 1 && trim($item)) {
+        $field[$lang][0][$key . $x] = trim($item);
+      }
+      elseif (trim($item)) {
+        $field[$lang][0][$key] = trim($item);
+      }
+    }
+    elseif (trim($item)) {
+      if ($format != 'none') {
+        $field[$lang][] = array($key => utf8_encode(trim($item)), 'format' => $format);
+      }
+      else {
+        $field[$lang][] = array($key => utf8_encode(trim($item)));
+      }
+    }
+  }
+
+  return $field;
+}
+
+/**
+ * Returns the raw end value for a field.
+ * 
+ * @param string $field
+ *   Field item
+ * @param string $entity
+ *   Entity item
+ * @param string $field_format
+ *   Field format to take
+ * @param string $entity_type
+ *   Entity type, often node
+ * 
+ * @return mixed
+ *   The Return Value can be a string or NULL
+ */
+function everyday_tools_get_raw_value($field, $entity, $field_format = 'safe_value', $entity_type = 'node', $resolve_tids = TRUE) {
+  $language = (isset($entity->language)) ? $entity->language : 'und';
+  $data = field_get_items($entity_type, $entity, $field, $language);
+  $value = array();
+
+  if ($data) {
+    foreach ($data as $v) {
+      if (isset($v[$field_format]) && $v[$field_format]) {
+        if ($field_format == 'tid' && $resolve_tids && module_exists('everyday_tools_taxonomy')) {
+          $value[] = everyday_tools_taxonomy_get_term_name($v[$field_format]);
+        }
+        else {
+          $value[] = $v[$field_format];
+        }
+      }
+      elseif (isset($v['value']) && $v['value']) {
+        $value[] = $v['value'];
+      }
+
+      if ($value) {
+        if (count($value) === 1) {
+          $value = $value[0];
+        }
+        return $value;
+      }
+      else {
+        return NULL;
+      }
+    }
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ * Returns the raw end values for a field.
+ * 
+ * @param string $field
+ *   Field item
+ * @param string $entity
+ *   Entity item
+ * @param string $field_format
+ *   Field format to take
+ * @param string $entity_type
+ *   Entity type, often node
+ * 
+ * @return mixed
+ *   The Return Value can be a string or NULL
+ */
+function everyday_tools_get_raw_value_multiple($field, $entity, $field_format = 'safe_value', $entity_type = 'node', $resolve_tids = TRUE) {
+  $language = (isset($entity->language)) ? $entity->language : 'und';
+  $data = field_get_items($entity_type, $entity, $field, $language);
+  $values = array();
+
+  if ($data) {
+    foreach ($data as $v) {
+      $value = array();
+
+      if (isset($v[$field_format]) && $v[$field_format]) {
+        if ($field_format == 'tid' && $resolve_tids && module_exists('everyday_tools_taxonomy')) {
+          $value[] = everyday_tools_taxonomy_get_term_name($v[$field_format]);
+        }
+        else {
+          $value[] = $v[$field_format];
+        }
+      }
+      elseif (isset($v['value']) && $v['value']) {
+        $value[] = $v['value'];
+      }
+
+      if ($value) {
+        if (count($value) === 1) {
+          $value = $value[0];
+        }
+
+        array_push($values, $value);
+      }
+    }
+
+    return $values;
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ * Instead of using safe_value use this.
+ * 
+ * @param string $entity
+ *   Entity item
+ * @param string $field_name
+ *   Name of the field required
+ * @param int $delta
+ *   Position of the item
+ * @param string $entity_type
+ *   Entity type, often node
+ * 
+ * @return string
+ *   Markup of items value
+ */
+function everyday_tools_get_field_value($entity, $field_name, $delta = 0, $entity_type = 'node') {
+
+  $field = field_get_items($entity_type, $entity, $field_name);
+  if ($field) {
+    $output = field_view_value($entity_type, $entity, $field_name, $field[$delta]);
+    if (isset($output['#markup'])) {
+      return $output["#markup"];
+    }
+    else {
+      return '';
+    }
+  }
+  else {
+    return NULL;
+  }
+}
+
+/**
+ * Trims the string at a word boundry.
+ * 
+ * @param string $str
+ *   String to trim
+ * @param length $n
+ *   Length of string to trim
+ * @param string $delim
+ *   (Optional) Type of delimeter to use
+ * 
+ * @return string 
+ *   Trimmed String
+ */
+function everyday_tools_neat_trim($str, $n = 200, $delim = '&hellip;') {
+  $str = strip_tags($str);
+  $len = strlen($str);
+  if ($len > $n) {
+    $last_space = strpos($str, ' ', $n);
+
+    // If the string is too short $last_space will be FALSE.
+    if ($last_space) {
+      $trim_str = substr($str, 0, $last_space);
+
+      // If we end on any of the below.
+      if (preg_match("/[0-9.!?,;:]$/", substr($trim_str, -1))) {
+        return substr($trim_str, 0, -1) . $delim;
+      }
+      return $trim_str . $delim;
+    }
+    return $str;
+  }
+  else {
+    return $str;
+  }
+}
+
+/**
+ * Strips non alpha numberic characters.
+ * 
+ * All alpha numberic characters except -_+ spaces are converted to hyphens
+ * and the string is forced to lower case.
+ * 
+ * @param string $str
+ *   The raw string to strip
+ * 
+ * @return strign
+ *   The formatted string
+ */
+function everyday_tools_strip_non_alphanumeric($str) {
+  $str = strtolower(str_replace(' ', ' ', preg_replace("/[^a-zA-Z0-9\-_+\s]/", "", $str)));
+  return $str;
+}
+
+/**
+ * Returns the number of days in a given month.
+ * 
+ * Also deals with February, for the given year.
+ * 
+ * @param string $year
+ *   Year to check against
+ * @param string $month
+ *   Month to check against
+ * 
+ * @return int
+ *   Number of days for given month
+ */
+function everyday_tools_days_in_month($year, $month) {
+  return date("t", strtotime($year . "-" . $month . "-01"));
+}
+
+/**
+ * Fixes the drupal cache when random strings are added to it.
+ * 
+ * @param cache $cache
+ *   Cache item to check
+ * 
+ * @return bool
+ *   Indicates a valid cache
+ */
+function everyday_tools_good_cache($cache) {
+  if ($cache && ($cache->data <> 'a:0:{}' && !strstr($cache->data, 'a:0:{}'))) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+
+/**
+ * Get all tags from a fieldset.
+ *
+ * Takes an array of tags, takes the fieldset with the tags, 
+ * and takes the individual field.
+ *
+ * @return array
+ *   Fills the array 'tags' with specific tags
+ */
+function everyday_tools_get_fieldset_tags(&$tags, $fieldset_location, $fieldset_field, $id_only = FALSE) {
+  $fieldset_tags = $fieldset_location->$fieldset_field;
+  if (isset ($fieldset_tags['und'])) {
+    if (!$id_only) {
+      foreach ($fieldset_tags['und'] as $tag) {
+        array_push($tags, $tag);
+      }
+    }
+    else {
+      foreach ($fieldset_tags['und'] as $tag) {
+        array_push($tags, $tag['tid']);
+      }
+    }
+  }
+}
+
+/**
+ * File size conversion to human readable format.
+ *
+ * @param int $bytes
+ *   Value in bytes to convert
+ *
+ * @return string
+ *   Returns a string of the size of a file with a human readable byte size
+ * appended
+ */
+function everyday_tools_format_size_units($bytes) {
+  if ($bytes >= 1073741824) {
+    $bytes = number_format($bytes / 1073741824, 2) . ' GB';
+  }
+  elseif ($bytes >= 1048576) {
+    $bytes = number_format($bytes / 1048576, 2) . ' MB';
+  }
+  elseif ($bytes >= 1024) {
+    $bytes = number_format($bytes / 1024, 2) . ' KB';
+  }
+  elseif ($bytes > 1) {
+    $bytes = $bytes . ' bytes';
+  }
+  elseif ($bytes == 1) {
+    $bytes = $bytes . ' byte';
+  }
+  else {
+    $bytes = '0 bytes';
+  }
+
+  return $bytes;
+}
+
+/**
+ * Function to get a counter for the current pager.
+ *
+ * @param object $view
+ *   The current view
+ * 
+ * @return array
+ *   returns the pagers output and the start integer for the current set
+ * of results being viewed
+ */
+function everyday_tools_get_pager_counter($view) {
+  global $pager_page_array, $pager_total_items, $pager_total;
+  $this_pager = $view->display_handler->get_option('pager');
+  $items_per_page = $this_pager['options']['items_per_page'];
+  $pager_output = '';
+
+  if ($pager_total[0] == 1) {
+    // Number of pages == 1.
+    $pager_output .= "<p>Showing " . $pager_total_items[0] . '</p>';
+    $start = 0;
+  }
+  else {
+    /* Page number is zero-based (first page is 0).
+     * Multiply pager_limit by page number (eg 0, 15, 30)
+     * and add 1 to get first item.
+     */
+    $start = 1 + ($pager_page_array[0] * $items_per_page);
+    // Multiply pager_limit by page number +1 (eg 15, 30, 45) to get last item.
+    $end = (1 + $pager_page_array[0]) * $items_per_page;
+    // Use total items count if this is less than that.
+    if ($end > $pager_total_items[0]) {
+      $end = $pager_total_items[0];
+    }
+
+    // Change language so that singular is used if only one result.
+    if (count($view->result) == 1) {
+      $pager_output .= "<p>Result $end of " . $pager_total_items[0] . '</p>';
+    }
+    else {
+      $pager_output .= "<p>Results $start-$end of " . $pager_total_items[0] . '</p>';
+    }
+  }
+
+  // Return the pager markup and the first item number of the pager.
+  return array($pager_output, $start);
+}
+
+/**
+ * Function to check if a dates format is value.
+ *
+ * @param string $value
+ *   The date
+ * 
+ * @return bool
+ *   Returns a boolean indicating if the date is valid
+ */
+function everyday_tools_is_valid_date($value, $format = 'dd.mm.yyyy') {
+  if (strlen($value) >= 6 && strlen($format) == 10) {
+    // Find separator. Remove all other characters from $format.
+    $separator_only = str_replace(array('m', 'd', 'y'), '', $format);
+    // Separator is first character.
+    $separator = $separator_only[0];
+    if ($separator && strlen($separator_only) == 2) {
+      // Make regex.
+      $regexp = str_replace('mm', '(0?[1-9]|1[0-2])', $format);
+      $regexp = str_replace('dd', '(0?[1-9]|[1-2][0-9]|3[0-1])', $regexp);
+      $regexp = str_replace('yyyy', '(19|20)?[0-9][0-9]', $regexp);
+      $regexp = str_replace($separator, "\\" . $separator, $regexp);
+      if ($regexp != $value && preg_match('/' . $regexp . '\z/', $value)) {
+        // Check date.
+        $arr = explode($separator, $value);
+        $day = $arr[0];
+        $month = $arr[1];
+        $year = $arr[2];
+        if (@checkdate($month, $day, $year)) {
+          return $year . '-' . $month . '-' . $day;
+        }
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Sends email.
+ * 
+ * @param string $from
+ *   From email address
+ * @param string $to
+ *   To email address
+ * @param string $subject
+ *   Email Subject
+ * @param string $message
+ *   Email message
+ * 
+ * @return bool
+ *   Sent / not sent
+ */
+function everyday_tools_user_send_mail($from, $to, $subject, $message) {
+  require_once 'includes/class.phpmailer.php';
+
+  $mail = new PHPMailer();
+  $mail->IsSendmail();
+
+  $mail->AddAddress($to);
+  $mail->Subject = $subject;
+  if (is_array($from)) {
+    $mail->AddReplyTo($from[0], ucwords($from[1]));
+    $mail->SetFrom($from[0], ucwords($from[1]));
+  }
+  else {
+    $mail->AddReplyTo($from);
+    $mail->SetFrom($from);
+  }
+
+  if (is_array($message)) {
+    $mail->AltBody = $message[1];
+    $mail->MsgHTML($message[0]);
+  }
+  else {
+    $mail->AltBody = $message;
+    $mail->MsgHTML($message);
+  }
+
+  if ($mail->Send()) {
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Renders blocks in a much more simplified manner.
+ * 
+ * @param string $module
+ *   Name of the module that implements the block to load.
+ * @param int $block_id
+ *   Unique ID of the block
+ * 
+ * @return string
+ *   Rendered block
+ */
+function everyday_tools_block_render($module, $block_id) {
+  $block = block_load($module, $block_id);
+  $block_content = _block_render_blocks(array($block));
+  $build = _block_get_renderable_array($block_content);
+  $block_rendered = drupal_render($build);
+  return $block_rendered;
+}
+
+/**
+ * Renders a time in the format of 'x hours ago'.
+ *
+ * @param timezone $ptime
+ *   Timezone formatted time string 2013-09-23T07:41:50+0000
+ *
+ * @return string
+ *   Time since
+ */
+function everyday_tools_time_elapsed_string($ptime) {
+  $etime = time() - strtotime($ptime);
+
+  if ($etime < 1) {
+    return '0 seconds';
+  }
+
+  $a = array(
+    12 * 30 * 24 * 60 * 60  => 'year',
+    30 * 24 * 60 * 60       => 'month',
+    24 * 60 * 60            => 'day',
+    60 * 60                 => 'hour',
+    60                      => 'minute',
+    1                       => 'second',
+  );
+
+  foreach ($a as $secs => $str) {
+    $d = $etime / $secs;
+    if ($d >= 1) {
+      $r = round($d);
+      return $r . ' ' . $str . ($r > 1 ? 's' : '') . ' ago';
+    }
+  }
+}
+
+/**
+ * Formats a string with a URL to make the URL clickable.
+ *
+ * @param string $string
+ *   String to format
+ *
+ * @retutn string $string
+ *   Formatted string
+ */
+function everyday_tools_string_hyperlink_format($string) {
+  $string = preg_replace('"\b(http://\S+)"', '<a href="$1">$1</a>', $string);
+
+  return $string;
+}
+
+/**
+ * Formats a string into Tite Case - ignoring small words.
+ *
+ * @param string $title
+ *   Item to convert
+ *
+ * @retutn string $newtitle
+ *   Formatted string
+ */
+function everyday_tools_strtotitle($title) {
+  /*
+   * Our array of 'small words' which shouldn't be capitalised if
+   * they aren't the first word. Add your own words to taste.
+   */
+  $smallwordsarray = array(
+    'of',
+    'a',
+    'the',
+    'and',
+    'an',
+    'or',
+    'nor',
+    'but',
+    'is',
+    'if',
+    'then',
+    'else',
+    'when',
+    'at',
+    'from',
+    'by',
+    'on',
+    'off',
+    'for',
+    'in',
+    'out',
+    'over',
+    'to',
+    'into',
+    'with',
+  );
+
+  // Split the string into separate words & set to lowercase.
+  $words = explode(' ', strtolower(trim($title)));
+
+  foreach ($words as $key => $word) {
+    /*
+     * If this word is the first, or it's not one of our small words,
+     * capitalise it with ucwords().
+     */
+    if ($key == 0 or !in_array($word, $smallwordsarray)) {
+      $words[$key] = ucwords($word);
+    }
+  }
+
+  // Join the words back into a string.
+  $newtitle = str_replace('  ', ' ', implode(' ', $words));
+  return $newtitle;
+}
+
+/**
+ * Function to compare months in an array.
+ *
+ * @param string $a
+ *   Month 1
+ * @param string $b
+ *   Month 2
+ *
+ * @return int
+ *   Result
+ */
+function everyday_tools_month_compare($a, $b) {
+  $a_month = date("m Y", $a);
+  $b_month = date("m Y", $b);
+
+  if ($a == $b) {
+    return 0;
+  }
+
+  return ($a_month > $b_month) ? 1 : -1;
+}
+
+/**
+ * Clean HTML values.
+ *
+ * @param string $string
+ *   String to filter
+ *
+ * @return string
+ *   Filtered HTML string
+ */
+function everyday_tools_clean_html_values($string) {
+  $string = str_replace('<p></p>', '', $string);
+  return $string;
+}
+
+/**
+ * Normalize the line endings first (windows style to unix style).
+ *
+ * @param string $str
+ *   String to sanitise
+ *
+ * @return string
+ *   Filtered string
+ */
+function everyday_tools_normalise_string($str) {
+  // Normalize line endings, Convert all line-endings to UNIX format.
+  $s = str_replace("\r\n", "\n", $str);
+  $s = str_replace("\r", "\n", $s);
+  // Don't allow out-of-control blank lines.
+  $s = preg_replace("/\n{2,}/", "\n\n", $s);
+  return $s;
+}
+
+/**
+ * Function to output Drupal Defined Variables.
+ */
+function everyday_tools_dBug_vars() {
+  new dBug(get_defined_vars());
+}
+
+/**
+ * Checks if a string starts with.
+ *
+ * @param string $haystack
+ *   String to check
+ * @param string $needle
+ *   What to search for
+ *
+ * @return string
+ *   Position
+ */
+function everyday_tools_starts_with($haystack, $needle) {
+  return $needle === "" || strpos($haystack, $needle) === 0;
+}
+
+/**
+ * Checks if a string ends with.
+ *
+ * @param string $haystack
+ *   String to check
+ * @param string $needle
+ *   What to search for
+ *
+ * @return string
+ *   Position
+ */
+function everyday_tools_ends_with($haystack, $needle) {
+  return $needle === "" || substr($haystack, -strlen($needle)) === $needle;
+}
+
+/**
+ * Check if string is a JSON object.
+ *
+ * @param string $string
+ *   JSON String? Perhaps
+ *
+ * @return bool
+ *   Shows if it is JSON or not
+ */
+function everyday_tools_is_json($string) {
+  json_decode($string);
+  return (json_last_error() == JSON_ERROR_NONE);
+}
+
+/**
+ * Function to return the youtube code from the embed URL.
+ *
+ * @param object $entity_type
+ *   The entity type, be it 'node', 'field_collection_item' etc
+ * @param object $entity
+ *   The loaded entity
+ * @param string $field_name
+ *   The name of the field
+ *
+ * @return string
+ *   $youtube_code
+ */
+function everyday_tools_youtube_extract_link_code($entity_type, $entity, $field_name, $language = LANGUAGE_NONE) {
+  $youtube_code_field = field_get_items($entity_type, $entity, $field_name, $language);
+  $youtube_code_url = array_key_exists('0', $youtube_code_field) && array_key_exists('value', $youtube_code_field[0]) ? $youtube_code_field[0]['value'] : NULL;
+  if (strstr($youtube_code_url, 'youtu.be/')) {
+    $youtube_code_url_split = explode('.be/', $youtube_code_url);
+  }
+  else {
+    $youtube_code_url_split = explode('?v=', $youtube_code_url);
+  }
+  $youtube_code = array_key_exists('1', $youtube_code_url_split) ? $youtube_code_url_split[1] : NULL;
+  return $youtube_code;
+}
+
+/**
+ * Function to replace nl characters with p and br elements.
+ *
+ * @param string $str
+ *   The field to update
+ *
+ * @return string
+ *   Altered string
+ */
+function everyday_tools_nl2pbr($str) {
+  $str = str_replace("\r", "", $str);
+  $str = str_replace("\n\n", "</p><p>", $str);
+  $str = str_replace("\n", "<br />", $str);
+  $str = '<p>' . $str . '</p>';
+  return $str;
+}
+
+/**
+ * Function to ensure the JSON Header is passed with the response.
+ *
+ * @param mixed $response
+ *   The item to JSON encode.
+ */
+function everyday_tools_json_encode($response) {
+  header('Content-Type: application/json');
+  print json_encode($response);
+  drupal_exit();
+}
+
+/**
+ * Modify query string parameters in a url.
+ *
+ * @param string $url
+ *   URL including existing query string.
+ * @param array $params
+ *   Array of parameters to add modify. Should contain
+ *   key value pairs.
+ *
+ * @return string
+ *   Modified URL.
+ */
+function everyday_tools_url_modify_query_string($url, $params = array()) {
+  $modified_url = '';
+
+  $url_chunks = explode('?', $url);
+
+  $modified_url .= $url_chunks[0];
+
+  $query_params = array();
+
+  // Modify existing parameters.
+  if (isset($url_chunks[1])) {
+    $query_string = $url_chunks[1];
+
+    $query_params = explode('&', $query_string);
+
+    foreach ($query_params as $query_param_key => &$query_param) {
+      $query_param_chunks = explode('=', $query_param);
+
+      $query_param_name = $query_param_chunks[0];
+
+      if (array_key_exists($query_param_name, $params)) {
+        if (isset($params[$query_param_name])) {
+          $query_param = $query_param_name . '=' . $params[$query_param_name];
+        }
+        else {
+          unset($query_params[$query_param_key]);
+        }
+
+        // Param modified, so unset it.
+        unset($params[$query_param_name]);
+      }
+    }
+  }
+
+  // Add new parameters.
+  foreach ($params as $key => $param) {
+    if ($param !== NULL) {
+      $query_params[] = $key . '=' . $param;
+    }
+  }
+
+  if (count($query_params)) {
+    $modified_url .= '?' . implode('&', $query_params);
+  }
+
+  return $modified_url;
+}

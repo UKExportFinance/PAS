@@ -1,0 +1,7 @@
+name = Everyday tools - Field Collection
+description = A lightweight module containing helper functions for field collection actions
+package = "Everyday Tools"
+core = 7.x
+version = VERSION
+dependencies[] = everyday_tools
+dependencies[] = field_collection

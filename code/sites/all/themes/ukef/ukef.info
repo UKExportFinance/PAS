@@ -1,0 +1,9 @@
+name = UKEF
+description = Theme for the UKEF portal
+package = Core
+version = VERSION
+core = 7.x
+
+regions[header] = Header
+regions[content] = Content
+regions[footer] = Footer

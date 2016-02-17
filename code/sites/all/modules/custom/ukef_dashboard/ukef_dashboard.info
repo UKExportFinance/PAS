@@ -1,0 +1,6 @@
+name = UKEF Dashboard
+description = A module for customising Dashboard component.
+package = UKEF
+core = 7.x
+
+dependencies[] = everyday_tools

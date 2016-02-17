@@ -1,0 +1,8 @@
+name = UKEF Exporter Questionnaire page
+description = A module for customising Exporter Questionnaire page.
+package = UKEF
+core = 7.x
+
+dependencies[] = everyday_tools
+dependencies[] = registered_variables
+dependencies[] = webform

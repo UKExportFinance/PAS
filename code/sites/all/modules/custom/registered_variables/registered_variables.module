@@ -1,0 +1,165 @@
+<?php
+/**
+ * @file
+ * A module for registering variables to be passed to specific entities
+ * and views.
+ *
+ * @author
+ * Marek Maciusowicz <marek.maciusowicz@readingroom.com>
+ */
+
+/**
+ * Class providing registered variables functionality.
+ */
+class RegisteredVariables {
+  private static $registeredVariablesSets = array();
+
+  /**
+   * Function for checking bean, node or view against variables set conditions.
+   *
+   * @param object $properties
+   *   Node, bean or view passed as context.
+   * @param array $conditions
+   *   Array of conditions in a given variables set.
+   *
+   * @return bool
+   *   True if properties match conditions or if no conditions set.
+   */
+  private static function check($properties, $conditions) {
+    if (!is_object($properties) || !is_array($conditions)) {
+      return FALSE;
+    }
+
+    $result = TRUE;
+
+    $check_properties = array(
+      'bid',
+      'component_type',
+      'delta',
+      'name',
+      'nid',
+      'type',
+    );
+
+    foreach ($check_properties as $check_property) {
+      if (isset($properties->$check_property)) {
+        if (isset($conditions[$check_property])) {
+          if (is_array($conditions[$check_property])) {
+            $result = $result && in_array($properties->$check_property, $conditions[$check_property]);
+          }
+          else {
+            $result = $result && $properties->$check_property == $conditions[$check_property];
+          }
+        }
+        else {
+          $result = $result && TRUE;
+        }
+      }
+      elseif (!empty($conditions[$check_property])) {
+        $result = FALSE;
+      }
+    }
+
+    return $result;
+  }
+
+  /**
+   * Function for getting the array of variables sets.
+   *
+   * @return array
+   *   Variables sets.
+   */
+  public static function get() {
+    return self::$registeredVariablesSets;
+  }
+
+  /**
+   * Function for processing variable sets and assiging variables to context.
+   *
+   * @param object $context
+   *   Bean, node or view passed as context.
+   */
+  public static function process($context) {
+    $registered_variables_sets = self::get();
+
+    foreach ($registered_variables_sets as $registered_variables_set) {
+      if (self::check($context, $registered_variables_set['conditions'])) {
+        if (is_callable($registered_variables_set['callback'])) {
+          $returned_variables = call_user_func($registered_variables_set['callback'], $context);
+
+          if (!isset($context->variables) || !is_array($context->variables)) {
+            $context->variables = array();
+          }
+
+          if (isset($returned_variables) && is_array($returned_variables)) {
+            foreach ($returned_variables as $key => $value) {
+              $context->variables[$key] = $value;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Function for setting a variables set.
+   *
+   * @return array
+   *   Updated variables sets.
+   */
+  public function set($variables_set) {
+    $result = array_push(self::$registeredVariablesSets, $variables_set);
+
+    return $result;
+  }
+}
+
+/**
+ * Implements hook_init().
+ *
+ * Function for initiating registered variables.
+ */
+function registered_variables_init() {
+  $registered_variables = new RegisteredVariables();
+
+  drupal_alter('registered_variables', $registered_variables);
+}
+
+/**
+ * Implements hook_entity_view_alter().
+ *
+ * Function for processing registered variables on call 
+ * to hook_entity_view_alter().
+ */
+function registered_variables_entity_view_alter(&$build) {
+  $properties = NULL;
+
+  if (isset($build['#node'])) {
+    if ($build['#entity_type'] == 'node') {
+      $properties = $build['#node'];
+
+      $properties->component_type = 'node';
+    }
+  }
+  elseif (isset($build['#entity'])) {
+    $properties = $build['#entity'];
+
+    $properties->component_type = $properties->entityType();
+  }
+
+  if ($properties) {
+    RegisteredVariables::process($properties);
+  }
+}
+
+/**
+ * Implements hook_views_pre_render().
+ *
+ * Function for processing registered variables on call 
+ * to hook_views_pre_render().
+ */
+function registered_variables_views_pre_render(&$view) {
+  $view->component_type = 'view';
+
+  RegisteredVariables::process($view);
+}

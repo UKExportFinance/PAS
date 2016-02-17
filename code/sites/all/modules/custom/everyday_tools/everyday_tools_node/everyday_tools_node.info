@@ -1,0 +1,7 @@
+name = Everyday tools - Node
+description = A lightweight module containing helper functions for node actions
+package = "Everyday Tools"
+core = 7.x
+version = VERSION
+dependencies[] = everyday_tools
+dependencies[] = node

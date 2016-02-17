@@ -1,0 +1,644 @@
+<?php
+/**
+ * @file
+ * A module for customising webforms.
+ *
+ * @author
+ * Marek Maciusowicz <marek.maciusowicz@readingroom.com>
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function ukef_webform_menu() {
+  $items = array();
+  
+  $items['ukef_webform/ajax/webform_element_add_more'] = array(
+    'page callback' => 'ukef_webform_ajax_print_webform_element_add_more',
+    'page_arguments' => array(),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function ukef_webform_theme($existing, $type, $theme, $path) {
+  $hooks = array(
+    'ukef_webform_element' => array(
+      'render element' => 'element',
+      'template' => 'templates/webform_element',
+    ),
+    'ukef_webform_display_pagebreak' => array(
+      'render element' => 'element',
+      'template' => 'templates/display/pagebreak',
+    ),
+    'ukef_webform_form' => array(
+      'render element' => 'form',
+      'template' => 'templates/webform_form',
+    ),
+    'ukef_webform_progress_bar' => array(
+      'variables' => array(
+        'node' => NULL,
+        'page_num' => NULL,
+        'page_count' => NULL,
+        'page_labels' => array(),
+        'steps' => array(),
+      ),
+      'template' => 'templates/webform_progressbar',
+    ),
+  );
+
+  return $hooks;
+}
+
+/**
+ * Prepare for theming of the webform form.
+ */
+function ukef_webform_preprocess_ukef_webform_form(&$variables) {
+  if (isset($variables['form']['details']['nid']['#value'])) {
+    $variables['nid'] = $variables['form']['details']['nid']['#value'];
+  }
+  elseif (isset($variables['form']['submission']['#value'])) {
+    $variables['nid'] = $variables['form']['submission']['#value']->nid;
+  }
+
+  if (!empty($variables['form']['#node']->webform['conditionals']) && empty($variables['form']['preview'])) {
+    module_load_include('inc', 'webform', 'includes/webform.conditionals');
+
+    $submission_data = isset($variables['form']['#conditional_values']) ? $variables['form']['#conditional_values'] : array();
+
+    $settings = webform_conditional_prepare_javascript($variables['form']['#node'], $submission_data, $variables['form']['details']['page_num']['#value']);
+
+    drupal_add_js(array('webform' => array('conditionals' => array('webform-client-form-' . $variables['nid'] => $settings))), 'setting');
+  }
+}
+
+/**
+ * Add hook suggestions for form element.
+ */
+function ukef_webform_preprocess_webform_element(&$variables) {
+  global $theme;
+
+  if ($theme == 'ukef') {
+    $in_preview = isset($variables['element']['#array_parents'])
+    && in_array('preview', $variables['element']['#array_parents']) ? TRUE : FALSE;
+
+    $optional_marker = isset($variables['element']['#required_marker'])
+    && $variables['element']['#required_marker']
+    || $in_preview ? '' : ' (Optional)';
+
+    $variables['element']['#label'] = '<label>' . filter_xss($variables['element']['#title']) . $optional_marker . '</label>';
+
+    $variables['element']['#wrapper_attributes']['id'] = 'webform_element_wrapper_' . $variables['element']['#webform_component']['form_key'];
+
+    $variables['element']['#wrapper_attributes']['class'][] = 'form-group';
+
+    if (in_array('webform-element-add-more', $variables['element']['#wrapper_attributes']['class'])) {
+      $variables['element']['#wrapper_attributes']['data-webform-element-add-more-nid'] = $variables['element']['#webform_component']['nid'];
+
+      $variables['element']['#wrapper_attributes']['data-webform-element-add-more-src'] = $variables['element']['#webform_component']['cid'];
+    }
+
+    $variables['theme_hook_suggestions'][] = 'ukef_webform_element';
+  }
+}
+
+
+/**
+ * Implements hook_form_alter().
+ */
+function ukef_webform_form_alter(&$form, &$form_state, $form_id) {
+  switch ($form_id) {
+    case 'webform_component_edit_form':
+      $form['extra']['guidance'] = array(
+        '#rows' => 5,
+        '#title' => t('Guidance'),
+        '#type' => 'text_format',
+        '#format' => 'full_html',
+        '#weight' => 0,
+        '#default_value' => (isset($form_state['build_info']['args'][1])
+        && isset($form_state['build_info']['args'][1]['extra'])
+        && isset($form_state['build_info']['args'][1]['extra']['guidance'])
+        && $form_state['build_info']['args'][1]['extra']['guidance']
+        && $form_state['build_info']['args'][1]['extra']['guidance']['value']) ?
+        $form_state['build_info']['args'][1]['extra']['guidance']['value'] : '',
+        '#description' => t('The default value of the field.') . ' ' . theme('webform_token_help'),
+      );
+
+      $form['extra']['json_conf'] = array(
+        '#rows' => 8,
+        '#title' => t('JSON configuration'),
+        '#type' => 'textarea',
+        '#weight' => 2,
+        '#default_value' => (isset($form_state['build_info']['args'][1])
+        && isset($form_state['build_info']['args'][1]['extra'])
+        && isset($form_state['build_info']['args'][1]['extra']['json_conf'])
+        && $form_state['build_info']['args'][1]['extra']['json_conf']) ?
+        $form_state['build_info']['args'][1]['extra']['json_conf'] : '',
+        '#description' => t('The default value of the field.') . ' ' . theme('webform_token_help'),
+      );
+
+      break;
+  }
+
+  if (preg_match('/^webform_client_form_\d+$/', $form_id)) {
+    $form['#theme'] = 'ukef_webform_form';
+
+    $form['#attributes']['class'][] = 'ukef_webform_' . $form['#node']->type;
+
+    $errors = webform_extras_get_errors($form, $form_state);
+
+    $form['#current_page_errors'] = webform_extras_get_current_page_errors($form, $form_state, $errors);
+
+    switch ($form['#node']->type) {
+      case 'exporter_questionnaire_page':
+      case 'exip_form_page':
+        if (isset($form['actions']['draft']) && $form['actions']['draft']) {
+          $form['actions']['draft']['#value'] = 'Save and go to dashboard';
+          $form['actions']['draft']['#weight'] = 10;
+          $form['actions']['draft']['#attributes']['class'][] = 'button-link button-save-and-come-back';
+        }
+
+        if (isset($form['actions']['previous']) && $form['actions']['previous']) {
+          unset($form['actions']['previous']);
+        }
+
+        if (isset($form['actions']['next']) && $form['actions']['next']) {
+          $form['actions']['next']['#attributes']['class'][] = 'button';
+
+          $form['actions']['next']['#value'] = 'Save and continue';
+
+        }
+
+        if (isset($form['actions']['submit']) && $form['actions']['submit']) {
+          $form['actions']['submit']['#attributes']['class'][] = 'button';
+
+          unset($form['actions']['draft']);
+        }
+
+        webform_extras_modify_progress_bar($form, 'ukef_webform_progress_bar', $errors);
+
+        $form['#submit'][] = 'ukef_webform_form_submit';
+
+        $form['#validate'][] = 'ukef_webform_form_validate';
+
+        $conditional_actions_cids = webform_extras_get_conditional_actions_cids($form['#node']->nid);
+
+        // Modify fields.
+        webform_extras_modify_fields($form['submitted'], $form['#current_page_errors'], $conditional_actions_cids);
+
+        // Customise preview if applicable.
+        if (array_key_exists('preview', $form)
+        && $form['preview']) {
+          if (isset($form['preview']['#node']->webform['progressbar_label_first'])) {
+            $form['preview']['pseudo_pagebreak_first'] = array(
+              '#theme' => 'ukef_webform_display_pagebreak',
+              '#title' => check_plain('1. ' . $form['preview']['#node']->webform['progressbar_label_first']),
+              '#weight' => -1,
+              '#format' => 'html',
+              '#webform_component' => array(
+                'type' => 'pagebreak',
+                'page_num' => 1,
+              ),
+            );
+          }
+
+          $form['preview']['pseudo_pagebreak_last'] = array(
+            '#theme' => '',
+            '#title' => '',
+            '#weight' => 100000,
+            '#format' => 'html',
+            '#suffix' => '</div></details>',
+          );
+
+          foreach ($form['preview'] as &$property) {
+            if (array_key_exists('#webform_component', $property)
+            && array_key_exists('type', $property['#webform_component'])
+            && $property['#webform_component']['type'] == 'pagebreak') {
+              if ($property['#webform_component']['page_num'] > 1) {
+                $property['#prefix'] = '</div></details>';
+              }
+
+              // Add suffix for all pagebreaks.
+              if ($property['#webform_component']['page_num'] < $form['details']['page_count']['#value'] ) {
+                $property['#suffix'] = '<div class="panel panel-border-narrow" aria-hidden="true" id="details-content-' . $property['#webform_component']['page_num'] . '">';
+              }
+            }
+          }
+        }
+
+        break;
+    }
+  }
+}
+
+
+/**
+ * Implements hook_form_validate().
+ */
+function ukef_webform_form_validate(&$form, &$form_state) {
+  $errors = webform_extras_get_errors($form, $form_state);
+
+  $form['#current_page_errors'] = webform_extras_get_current_page_errors($form, $form_state, $errors);
+
+  $conditional_actions_cids = webform_extras_get_conditional_actions_cids($form['#node']->nid);
+
+  webform_extras_modify_fields($form['submitted'], $form['#current_page_errors'], $conditional_actions_cids);
+
+  foreach ($form['#current_page_errors'] as $step_errors) {
+    foreach ($step_errors as $error) {
+      if (isset($error['stop']) && $error['stop'] == TRUE || $form_state['clicked_button']['#id'] == 'edit-submit') {
+        form_set_error($error['form_key'], '');
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_form_submit().
+ */
+function ukef_webform_form_submit(&$form, &$form_state) {
+  if (isset($form_state['clicked_button'])) {
+    if (isset($form_state['clicked_button']['#attributes']['data-page']) && $form_state['clicked_button']['#attributes']['data-page']) {
+      $form_state['storage']['page_num'] = $form_state['clicked_button']['#attributes']['data-page'];
+    }
+  }
+
+  switch ($form_state['clicked_button']['#id']) {
+    case 'edit-draft':
+      drupal_goto('/');
+
+      break;
+  }
+}
+
+function ukef_webform_webform_component_display_alter(&$element, &$component) {
+  switch ($component['type']) {
+    case 'pagebreak':
+      if ($element['#format'] == 'html') {
+        $element['#title'] = check_plain($component['page_num'] . '. ' . $element['#title']);
+
+        $element['#theme'] = 'ukef_webform_display_pagebreak';
+      }
+
+      break;
+
+    case 'textarea':
+      if (array_key_exists('extra', $component)
+      && array_key_exists('wrapper_classes', $component['extra'])){
+        if (strstr($component['extra']['wrapper_classes'], 'webform-element-add-more')) {
+          $markup = '';
+
+          $json = json_decode($component['extra']['json_conf']);
+
+          $conf = ($json && isset($json->conf)) ? $json->conf : array();
+
+          $value_rows_strings = explode("\n", $element['#value']);
+
+          array_pop($value_rows_strings);
+
+          foreach ($value_rows_strings as $value_row_string) {
+            $markup .= '<div class="add-more-display-item"><p class="add-more-display-item-record-label">' . $json->record_label . '</p>';
+
+            $value_row_chunks = explode(';', $value_row_string);
+
+            array_pop($value_row_chunks);
+
+            $i = 0;
+
+            foreach ($value_row_chunks as $value_row_chunk) {
+              if (array_key_exists($i, $conf)) {
+                $field_value = trim($value_row_chunk);
+
+                $field = $conf[$i];
+
+                $prefix = isset($field->prefix) ? $field->prefix : '';
+
+                $suffix = isset($field->suffix) ? $field->suffix : '';
+
+                $form_key = $field->key;
+
+                $countries = array();
+
+                if (!count($countries)) {
+                  include_once DRUPAL_ROOT . '/includes/locale.inc';
+
+                  $countries = country_get_list();
+                }
+
+                switch ($field->type) {
+                  case 'checkbox':
+                    if ($field_value) {
+                      $field_value = 'Yes';
+                    }
+                    else {
+                      $field_value = 'No';
+                    }
+
+                    break;
+
+                  case 'select':
+                    if (isset($json->prepopulate)
+                    && isset($json->prepopulate->$form_key)) {
+                      foreach ($json->prepopulate->$form_key->options as $option_key => $option_value) {
+                        if ($option_key == $field_value) {
+                          $field_value = $option_value;
+
+                          break;
+                        }
+                      }
+                    }
+                    break;
+
+                  case 'select_country':
+                    foreach ($countries as $option_key => $option_value) {
+                      if ($option_key == $field_value) {
+                        $field_value = $option_value;
+
+                        break;
+                      }
+                    }
+
+                    break;
+                }
+
+                $markup .= '<div><label class="add-more-display-item-label">' . $field->label . '</label><span>' . $prefix . $field_value . $suffix . '&nbsp;</span></div>';
+              }
+
+              $i++;
+            }
+
+            $markup .= '</div>';
+          }
+          $element['#format'] = 'full_html';
+
+          $element['#value'] = $markup;
+        }
+      }
+
+      break;
+  }
+}
+
+/**
+ * Implements hook_webform_component_render_alter().
+ */
+function ukef_webform_webform_component_render_alter(&$element, &$component) {
+  switch ($component['type']) {
+    case 'date':
+      $element['#process'][] = 'ukef_webform_expand_date';
+      break;
+  }
+}
+
+/**
+ * Implements hook_webform_draft_alter().
+ */
+function ukef_webform_webform_draft_alter(&$sid, $context) {
+  $params = drupal_get_query_parameters();
+
+  if (isset($params['application_sid']) && is_numeric($params['application_sid'])) {
+    $sid = filter_xss($params['application_sid']);
+  }
+  elseif ($_SERVER['HTTP_REFERER'] && $_SERVER['HTTP_REFERER'] != '') {
+    $sid = NULL;
+  }
+}
+
+/**
+ * Change date field to textfields.
+ *
+ * @param array $element
+ *   Form element details.
+ *
+ * @return array
+ *   Modified element details.
+ */
+function ukef_webform_expand_date($element) {
+  if (array_key_exists('#exclude', $element)
+  && in_array('day', $element['#exclude'])) {
+    $element['day']['#disabled'] = TRUE;
+  }
+
+  $element['day']['#maxlength'] = 2;
+  $element['day']['#size'] = 2;
+  $element['day']['#type'] = 'textfield';
+  $element['day']['#weight'] = 1;
+  unset($element['day']['#options']);
+
+  if (array_key_exists('#exclude', $element)
+  && in_array('month', $element['#exclude'])) {
+    $element['month']['#disabled'] = TRUE;
+  }
+  $element['month']['#maxlength'] = 2;
+  $element['month']['#size'] = 2;
+  $element['month']['#type'] = 'textfield';
+  $element['month']['#weight'] = 2;
+  unset($element['month']['#options']);
+
+  if (array_key_exists('#exclude', $element)
+  && in_array('year', $element['#exclude'])) {
+    $element['year']['#disabled'] = TRUE;
+  }
+
+  $element['year']['#maxlength'] = 4;
+  $element['year']['#size'] = 4;
+  $element['year']['#type'] = 'textfield';
+  $element['year']['#weight'] = 3;
+  unset($element['year']['#options']);
+
+  return $element;
+}
+
+/**
+ * Print the config for webform element add more.
+ */
+function ukef_webform_ajax_print_webform_element_add_more() {
+  module_load_include('inc', 'webform', 'includes/webform.components');
+
+  $params = drupal_get_query_parameters();
+
+  $node = NULL;
+
+  $cid = NULL;
+
+  if (array_key_exists('nid', $params)
+  && array_key_exists('src', $params)) {
+    $nid = filter_xss($params['nid']);
+
+    if (is_numeric($nid)) {
+      $node = node_load($nid);
+    }
+
+    $src = filter_xss($params['src']);
+
+    if (is_numeric($src)) {
+      $cid = $src;
+    }
+  }
+
+  if ($node
+  && isset($node->webform)
+  && $cid) {
+    $components = $node->webform['components'];
+
+    if (array_key_exists($cid, $components)) {
+      $component = $components[$cid];
+
+      if (array_key_exists('extra', $component)
+      && array_key_exists('json_conf', $component['extra'])) {
+        $json_str = str_replace("\r\n", '', $component['extra']['json_conf']);
+
+        $json_output = json_decode($json_str);
+
+        // Add prepopulated list of countries if required.
+        $countries = array();
+
+        if (isset($json_output->conf)) {
+          foreach ($json_output->conf as $col) {
+            $key = $col->key;
+              
+            switch ($col->type) {
+              case 'select_country':
+                if (!count($countries)) {
+                  include_once DRUPAL_ROOT . '/includes/locale.inc';
+
+                  $countries = country_get_list();
+                }
+
+                $json_output->prepopulate->$key->options = $countries;
+
+                break;
+            }
+          }
+        }
+
+        $json_output_str = json_encode($json_output);
+
+        print $json_output_str;
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_webform_extras_validate_special().
+ */
+function ukef_webform_webform_extras_validate_special_alter(&$errors, $field, &$skip) {
+  if ($skip) {
+    return;
+  }
+
+  $component = $field['component'];
+
+  $step_key = $field['step_key'];
+
+  $value = $field['value'];
+
+  // Perform special fields validation.
+  if (array_key_exists('extra', $component)
+  && array_key_exists('wrapper_classes', $component['extra'])){
+    if (strstr($component['extra']['wrapper_classes'], 'webform-element-add-more')) {
+      $json = json_decode($component['extra']['json_conf']);
+
+      $conf = ($json && isset($json->conf)) ? $json->conf : array();
+
+      $value_rows_strings = explode("\n", $value[0]);
+
+      array_pop($value_rows_strings);
+
+      if ($component['required']
+      && !count($value_rows_strings)) {
+        foreach ($conf as $field) {
+          if (isset($field->required)
+          && $field->required) {
+            $errors[$step_key][] = array(
+              'cid' => $component['cid'],
+              'form_key' => $component['form_key'],
+              'message' => $field->label . ' in ' . $component['name'] . ' is required.',
+              'stop' => FALSE,
+            );
+          }
+        }
+      }
+
+      foreach ($value_rows_strings as $value_row_string) {
+        $value_row_chunks = explode(';', $value_row_string);
+
+        array_pop($value_row_chunks);
+
+        $i = 0;
+
+        foreach ($value_row_chunks as $value_row_chunk) {
+          if (array_key_exists($i, $conf)) {
+
+            $field_value = trim($value_row_chunk);
+
+            $field = $conf[$i];
+
+            if (isset($field->required)
+            && $field->required
+            && strlen($field_value) == 0) {
+              $errors[$step_key][] = array(
+                'cid' => $component['cid'],
+                'form_key' => $component['form_key'],
+                'message' => $field->label . ' in ' . $component['name'] . ' is required.',
+                'stop' => FALSE,
+              );
+            }
+            else {
+              switch ($field->type) {
+                case 'date':
+                  $date_chunks = explode('/', $field_value);
+
+                  if (!checkdate($date_chunks[1], $date_chunks[0], $date_chunks[2])) {
+                    $errors[$step_key][] = array(
+                      'cid' => $component['cid'],
+                      'form_key' => $component['form_key'],
+                      'message' => $field->label . ' in ' . $component['name'] . ' contains an invalid date.',
+                      'stop' => TRUE,
+                    );
+                  }
+
+                  break;
+
+                case 'number':
+                  if (isset($field->min)) {
+                    if ($field_value < $field->min) {
+                      $errors[$step_key][] = array(
+                        'cid' => $component['cid'],
+                        'form_key' => $component['form_key'],
+                        'message' => $field->label . ' in ' . $component['name'] . ' has to be greater or equal to ' . $field->min . '.',
+                        'stop' => TRUE,
+                      );
+                    }
+                  }
+
+                  if (isset($field->max)) {
+                    if ($field_value > $field->max) {
+                      $errors[$step_key][] = array(
+                        'cid' => $component['cid'],
+                        'form_key' => $component['form_key'],
+                        'message' => $field->label . ' in ' . $component['name'] . ' has to be less or equal to ' . $field->max . '.',
+                        'stop' => TRUE,
+                      );
+                    }
+                  }
+
+                  break;
+              }
+            }
+          }
+
+          $i++;
+        }
+      }
+
+      $skip = TRUE;
+    }
+  }
+}

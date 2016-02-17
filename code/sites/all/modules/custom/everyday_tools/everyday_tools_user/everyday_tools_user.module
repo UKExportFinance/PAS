@@ -1,0 +1,180 @@
+<?php
+
+/**
+ * @file
+ * The Everyday Tools module was created to house functions that are useful 
+ * in every Drupal build that requires some degree of development. 
+ * The functions in this module are for User Actions
+ */
+
+/**
+ * If the user is an administrator an edit button is displayed.
+ * 
+ * @param object $user
+ *   User object to check against
+ * @param array $allowed_roles
+ *   A list of string represenation of roles which are allowed to use this
+ *   button. e.g.
+ *   array(
+ *    'administrator',
+ *    'authenticated user',
+ *   );
+ *   This would show the edit link to anyone who belongs to the administrator
+ *   role and anyone who belongs to the authenticated user role.
+ * @param string $link_class
+ *   (Optional) Link Class
+ * 
+ * @return string
+ *   An edit button
+ */
+function everyday_tools_user_show_edit($user, $allowed_roles = array('administrator'), $link_class = '') {
+  $html = '';
+
+  // Check to make sure we have one of the specified roles.
+  if (everyday_tools_user_has_role($user, $allowed_roles)) {
+    $path = current_path();
+    if (!strstr($path, 'node/') && !strstr($path, 'taxonomy/')) {
+      $path = '';
+    }
+    else {
+      $language_path = '';
+      $current_language = module_exists('i18n') ? i18n_langcode() : LANGUAGE_NONE;
+
+      if ($current_language != 'en' && $current_language != LANGUAGE_NONE) {
+        $language_path = $current_language . '/';
+      }
+      // Get the id of the current node.
+      $node_id = arg(1);
+      // Check to make sure the user has the correct permissions to edit.
+      if (node_access('update', $node_id, $user) === TRUE) {
+        $path = '/' . $language_path . $path . '/edit?destination=' . $path;
+        $html = '<div class="admin"><a class="' . $link_class . '" href="' . $path . '">' . t("Edit this page") . '</a></div>';
+      }
+      else {
+        $path = '';
+      }
+    }
+  }
+  return $html;
+}
+
+/**
+ * Function to check if the currently logged in user has a certain role.
+ * 
+ * @global object $user
+ *   User Object
+ *
+ * @param mixed $role
+ *   String / array of roles
+ *
+ * @return bool
+ *   Shows if the user has the role
+ */
+function everyday_tools_user_has_role($user, $role = 'administrator') {
+
+  if (is_numeric($user->uid) && (intval($user->uid) === 1)) {
+    return TRUE;
+  }
+
+  if (isset($user->roles)) {
+    if (is_array($role)) {
+      foreach ($role as $user_role) {
+        if (in_array($user_role, $user->roles)) {
+          return TRUE;
+        }
+      }
+    }
+    else {
+      if (in_array($role, $user->roles)) {
+        return TRUE;
+      }
+    }
+  }
+
+  return FALSE;
+}
+
+/**
+ * Set a destination for logging in / out.
+ * 
+ * Set a destination so that users go back to the correct 
+ * pages once they have logged in / out.
+ * 
+ * @return string
+ *   Destination to redirect
+ */
+function everyday_tools_user_get_destination() {
+  $orig_query_string = '';
+  if (filter_input(INPUT_GET, 'orig')) {
+    $orig_query_string = '?destination=' . filter_input(INPUT_GET, 'orig');
+  }
+  elseif (current_path()) {
+    $orig_query_string = '?destination=' . current_path();
+  }
+  elseif (isset($url_parts)) {
+    $orig_query_string = '?destination=' . urlencode($url_parts[0]);
+  }
+
+  return $orig_query_string;
+}
+
+/**
+ * Returns a blank user object containing all of the fields.
+ * 
+ * A password has been created and force password is set to true
+ * The user type has been set to authenticated user
+ *
+ * @param array $fields
+ *   Fields to map against the user
+ * @param mixed $role
+ *   The role the user will be created with in string format
+ *   Can also pass in an array of roles
+ * @param int $password_change
+ *   Allow to force password change
+ * 
+ * @return bool
+ *   Returns FALSE if there was an error, otherwise returns $new_user
+ */
+function everyday_tools_user_create($fields, $role, $password_change = 0) {
+  // Create a random password.
+  $password = user_password(30);
+  // Create a blank user.
+  $new_user = user_load(0);
+
+  // Enter standard fields.
+  $new_user->pass = $password;
+  if (is_array($role) && count($role)) {
+    $new_user->roles = $role;
+  }
+  elseif (is_string($role) && strlen($role)) {
+    $new_user->roles = array(DRUPAL_AUTHENTICATED_RID => $role);
+  }
+  else {
+    $new_user->roles = array(DRUPAL_AUTHENTICATED_RID => 'authenticated user');
+  }
+  $new_user->force_password_change = $password_change;
+  $new_user->signature_format = 'plain_text';
+  $new_user->status = 1;
+  $new_user->created = time();
+
+  // Loop over fields to add them to the user.
+  foreach ($fields as $key => $field) {
+    $new_user->$key = $field;
+  }
+
+  /* Needs to be returned as an array so this will change
+   * it from an object to an array.
+   */
+  $new_user = get_object_vars($new_user);
+
+  // The first parameter is left blank so a new user is created.
+  try {
+    $created_user = user_save(NULL, $new_user);
+  }
+  catch (Exception $e) {
+    // Log the error message.
+    watchdog('php', 'Caught exception: ' . $e->getMessage());
+    return FALSE;
+  }
+  return $created_user;
+}

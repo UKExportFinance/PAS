@@ -1,0 +1,37 @@
+<?php
+
+/**
+ * @file
+ * The Everyday Tools module was created to house functions that are useful in
+ * every Drupal build that requires some degree of development.
+ * The functions in this module are for Solr Search
+ */
+
+
+/**
+ * SOLR space replacement function.
+ *
+ * @param string $str
+ *   String to be checked and replaced
+ *
+ * @return string
+ *   The solr ready string
+ */
+function everyday_tools_solr_replace_space_for_solr($str) {
+  $str = str_replace(' ', '%20', $str);
+  return $str;
+}
+
+/**
+ * Function to replace ampersands that dont split taxonomy.
+ *
+ * @param string $str
+ *   String to be checked and replaced
+ *
+ * @return string
+ *   The solr ready string
+ */
+function everyday_tools_solr_replace_ampersand_for_solr($str) {
+  $str = str_replace('-&-', '-%26-', $str);
+  return $str;
+}
